@@ -11,8 +11,11 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+
+     "postinstall": "prisma generate",
+    "build": "npm run prisma:generate && next build",
+    "prisma:generate": "prisma generate",
+     "start": "next start",
     "lint": "next lint",
     "prepare": "husky",
     "test": "jest --config ./jest.config.js --passWithNoTests"
