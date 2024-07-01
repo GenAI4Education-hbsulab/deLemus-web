@@ -13,7 +13,7 @@ const MentorCard = () => {
       />
       <div>
         <h4 className="font-semibold">Ronald Richards</h4>
-        <p className="text-sm text-gray-600">UI/UX Instructor</p>
+        <p className="text-xs text-gray-600">UI/UX Instructor</p>
       </div>
     </div>
   );

@@ -8,7 +8,7 @@ const JN1Overview: React.FC = () => {
   return (
     <div>
       <h1 className="text-3xl font-light mb-4">JN.1</h1>
-      <p className="mb-4 text-xs">
+      <p className="mb-4 text-sm">
         The JN.1 (BA.2.86.1.1) is the most recently dominating variant of
         SARS-CoV-2 that descended from the BA.2.86 lineage.
       </p>
@@ -160,6 +160,6 @@ const JN1Overview: React.FC = () => {
 export default JN1Overview;
 
 const hrefs = [
-  { url: { pathname: "/content/kp2" }, text: "Back" },
-  { url: { pathname: "/content/quiz" }, text: "Next" },
+  { url: { pathname: "/student/content/kp2" }, text: "Back" },
+  { url: { pathname: "/student/content/quiz" }, text: "Next" },
 ] as const;

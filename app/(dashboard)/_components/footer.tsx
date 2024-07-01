@@ -43,11 +43,9 @@ const Footer = () => {
         </div>
         <div className="flex-1 text-center md:text-right">
           <h2 className="text-sm font-semibold mb-2">Contact Us</h2>
-          <p className="text-gray-400">Email: support@eduplatform.com</p>
+          <p className="text-gray-400">Email: jzhucb@connect.ust.hk</p>
           <p className="text-gray-400">Phone: +123 456 7890</p>
-          <p className="text-gray-400">
-            Address: 123 Learning Lane, Knowledge City
-          </p>
+          <p className="text-gray-400">Address: Clear Water Bay, Hong Kong</p>
         </div>
         <div className="flex-1 text-center md:text-right">
           <h2 className="text-sm font-semibold mb-2">Follow Us</h2>

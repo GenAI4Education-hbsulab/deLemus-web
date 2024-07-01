@@ -59,6 +59,6 @@ export default function Home() {
 }
 
 const hrefs = [
-  { url: { pathname: "/content" }, text: "Back" },
-  { url: { pathname: "/content/kp2" }, text: "Next" },
+  { url: { pathname: "/student/content" }, text: "Back" },
+  { url: { pathname: "/student/content/kp2" }, text: "Next" },
 ] as const;

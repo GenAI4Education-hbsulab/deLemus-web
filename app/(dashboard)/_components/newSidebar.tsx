@@ -23,42 +23,37 @@ const guestRoutes = [
   {
     icon: Layout,
     label: "Dashboard",
-    href: { pathname: "/" },
-  },
-  {
-    icon: Compass,
-    label: "Browse",
-    href: { pathname: "/search" },
+    href: { pathname: "/student/dashboard" },
   },
   {
     icon: Book,
-    label: "Categories",
-    href: { pathname: "/category" },
+    label: "Search",
+    href: { pathname: "/student/category" },
   },
   {
     icon: BookOpenText,
     label: "Content",
-    href: { pathname: "/content" },
+    href: { pathname: "/student/content" },
   },
   {
     icon: User,
     label: "Profile",
-    href: { pathname: "/profile" },
+    href: { pathname: "/student/profile" },
   },
   {
     icon: Clipboard,
     label: "Assignments",
-    href: { pathname: "/assignments" },
+    href: { pathname: "/student/assignments" },
   },
   {
     icon: Bell,
     label: "Notifications",
-    href: { pathname: "/notifications" },
+    href: { pathname: "/student/notifications" },
   },
   {
     icon: Settings,
     label: "Settings",
-    href: { pathname: "/settings" },
+    href: { pathname: "/student/settings" },
   },
 ];
 
@@ -82,10 +77,26 @@ const sidebarData: {
   {
     title: "Chapter 1",
     items: [
-      { text: "General Info", completed: true, href: { pathname: "/content" } },
-      { text: "KP.2", completed: false, href: { pathname: "/content/kp2" } },
-      { text: "JN.1", completed: false, href: { pathname: "/content/jn1" } },
-      { text: "Quiz", completed: false, href: { pathname: "/content/quiz" } },
+      {
+        text: "General Info",
+        completed: true,
+        href: { pathname: "/student/content" },
+      },
+      {
+        text: "KP.2",
+        completed: false,
+        href: { pathname: "/student/content/kp2" },
+      },
+      {
+        text: "JN.1",
+        completed: false,
+        href: { pathname: "/student/content/jn1" },
+      },
+      {
+        text: "Quiz",
+        completed: false,
+        href: { pathname: "/student/content/quiz" },
+      },
     ],
   },
   {
@@ -95,13 +106,14 @@ const sidebarData: {
         text: "Introduction to Asymptotic notation",
         completed: false,
         href: {
-          pathname: "/content/chapter2/introduction-asymptotic-notation",
+          pathname:
+            "/student/content/chapter2/introduction-asymptotic-notation",
         },
       },
       {
         text: "Big-Θ (Big-Theta) notation",
         completed: false,
-        href: { pathname: "/content/chapter2/big-theta-notation" },
+        href: { pathname: "/student/content/chapter2/big-theta-notation" },
       },
     ],
   },
@@ -139,7 +151,7 @@ const NewSideBar: React.FC = () => {
             />
             {route.label === "Content" &&
               !isTeacherPage &&
-              pathname.startsWith("/content") && (
+              pathname.startsWith("/student/content") && (
                 <>
                   {sidebarData.map((section, index) => (
                     <div key={index} className="px-4">

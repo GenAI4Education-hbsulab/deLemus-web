@@ -7,8 +7,8 @@ import NavigationButtons from "./button";
 const KP2Overview: React.FC = () => {
   return (
     <div>
-      <h1 className="text-3xl font-light">KP.2</h1>
-      <p className="mb-4 text-xs">
+      <h1 className="text-3xl font-light mb-4">KP.2</h1>
+      <p className="mb-4 text-sm">
         The KP.2 (JN.1.11.1.2) variant is the most recently emerged variant of
         SARS-CoV-2 that descended from the JN.1 lineage.
       </p>
@@ -114,6 +114,6 @@ const KP2Overview: React.FC = () => {
 export default KP2Overview;
 
 const hrefs = [
-  { url: { pathname: "/content" }, text: "Back" },
-  { url: { pathname: "/content/jn1" }, text: "Next" },
+  { url: { pathname: "/student/content" }, text: "Back" },
+  { url: { pathname: "/student/content/jn1" }, text: "Next" },
 ] as const;

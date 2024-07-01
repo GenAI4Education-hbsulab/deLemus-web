@@ -190,7 +190,7 @@ const quizQuestions = [
 ];
 
 const sections = [
-  { title: "General Info", link: "/content" },
-  { title: "KP.2", link: "/content/kp2" },
-  { title: "JN.1", link: "/content/jn1" },
+  { title: "General Info", link: "/student/content" },
+  { title: "KP.2", link: "/student/content/kp2" },
+  { title: "JN.1", link: "/student/content/jn1" },
 ] as const;
