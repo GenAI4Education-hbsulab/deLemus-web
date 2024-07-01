@@ -9,5 +9,4 @@ const nextConfig = {
       domains: ['via.placeholder.com'],
     },
 };
-
 export default nextConfig;
