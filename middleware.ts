@@ -1,7 +1,13 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
+// middleware.js
+import { NextRequest, NextResponse } from 'next/server';
 
-export default clerkMiddleware({});
+export function middleware(request  :NextRequest) {
+  // Example middleware logic
+  const response = NextResponse.next();
+  // Add headers or manipulate response as needed
+  return response;
+}
 
 export const config = {
-  matcher: ["/((?!.+.[w]+$|_next).*)", "/", "/(api|trpc)(.*)"],
+  matcher: '/api/:path*', // Adjust the matcher based on your routes
 };
