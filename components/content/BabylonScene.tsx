@@ -4,7 +4,7 @@ import * as BABYLON from "@babylonjs/core";
 import "@babylonjs/loaders"; // Ensure the loaders are included
 import "@babylonjs/inspector"; // Optional, for debugging
 
-const BabylonScene: React.FC = () => {
+const ClientComponent: React.FC<{ models: string[] }> = ({ models }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [isInVR, setIsInVR] = useState(false);
@@ -57,11 +57,8 @@ const BabylonScene: React.FC = () => {
         scene.render();
       });
 
+      const handleResize = () => engine.resize();
       window.addEventListener("resize", handleResize);
-
-      function handleResize() {
-        engine.resize();
-      }
 
       return () => {
         window.removeEventListener("resize", handleResize);
@@ -74,6 +71,8 @@ const BabylonScene: React.FC = () => {
       xr.input.onControllerAddedObservable.add((inputSource) => {
         if (inputSource.motionController) {
           addThumbstickComponentInteraction(inputSource);
+          addTriggerButtonInteraction(inputSource);
+          addExitVRButtonInteraction(inputSource);
         }
       });
     };
@@ -97,6 +96,46 @@ const BabylonScene: React.FC = () => {
       }
     };
 
+    const addTriggerButtonInteraction = (inputSource: BABYLON.WebXRInputSource) => {
+      const triggerComponent = inputSource.motionController?.getComponent("xr-standard-trigger");
+
+      const scaleChange = 0.1;
+      const minScale = 0.1;
+      const maxScale = 5.0;
+
+      const scaleModel = (increase: boolean) => {
+        if (modelRef.current) {
+          const factor = increase ? scaleChange : -scaleChange;
+          modelRef.current.scaling.addInPlace(new BABYLON.Vector3(factor, factor, factor));
+
+          modelRef.current.scaling.x = BABYLON.Scalar.Clamp(modelRef.current.scaling.x, minScale, maxScale);
+          modelRef.current.scaling.y = BABYLON.Scalar.Clamp(modelRef.current.scaling.y, minScale, maxScale);
+          modelRef.current.scaling.z = BABYLON.Scalar.Clamp(modelRef.current.scaling.z, minScale, maxScale);
+        }
+      };
+
+      if (triggerComponent) {
+        triggerComponent.onButtonStateChangedObservable.add((component) => {
+          if (component.pressed) {
+            scaleModel(true);  // Scale up when the trigger is pressed
+          } else {
+            scaleModel(false); // Scale down when the trigger is released
+          }
+        });
+      }
+    };
+
+    const addExitVRButtonInteraction = (inputSource: BABYLON.WebXRInputSource) => {
+      const exitButtonPressHandler = (component: BABYLON.WebXRControllerComponent) => {
+        if (component.pressed) {
+          exitVR();
+        }
+      };
+
+      inputSource.motionController?.getComponent("b-button")?.onButtonStateChangedObservable.add(exitButtonPressHandler);
+      inputSource.motionController?.getComponent("y-button")?.onButtonStateChangedObservable.add(exitButtonPressHandler);
+    };
+
     initializeScene();
   }, []);
 
@@ -112,7 +151,7 @@ const BabylonScene: React.FC = () => {
     }
 
     const assetsManager = new BABYLON.AssetsManager(scene);
-    const glbTask = assetsManager.addMeshTask("glbTask", "", "/", "1mbn.gltf");
+    const glbTask = assetsManager.addMeshTask("glbTask", "", "/", models[0]); // Using the first model
 
     glbTask.onSuccess = (task) => {
       task.loadedMeshes.forEach((mesh) => {
@@ -127,7 +166,7 @@ const BabylonScene: React.FC = () => {
     };
 
     assetsManager.load();
-  }, [isModelLoaded]);
+  }, [isModelLoaded, models]);
 
   const exitVR = useCallback(() => {
     xrRef.current?.baseExperience.exitXRAsync();
@@ -142,16 +181,8 @@ const BabylonScene: React.FC = () => {
       >
         {isModelLoaded ? "Unload Model" : "Load Model"}
       </button>
-      {isInVR && (
-        <button
-          onClick={exitVR}
-          className="absolute top-2 right-2 z-10 p-4 text-2xl font-bold text-white bg-green-500 rounded"
-        >
-          Exit VR
-        </button>
-      )}
     </div>
   );
 };
 
-export default BabylonScene;
+export default ClientComponent;
