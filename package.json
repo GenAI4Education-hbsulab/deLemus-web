@@ -40,6 +40,7 @@
     "aframe": "^1.6.0",
     "aframe-event-set-component": "^5.0.0",
     "aframe-react": "^4.4.0",
+    "ammo.js": "^0.0.10",
     "autoprefixer": "^10.4.19",
     "axios": "^1.7.2",
     "babel-polyfill": "^6.26.0",
