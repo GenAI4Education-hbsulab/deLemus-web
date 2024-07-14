@@ -1,188 +1,110 @@
 "use client";
-import React, { useEffect, useRef, useState, useCallback } from "react";
-import * as BABYLON from "@babylonjs/core";
-import "@babylonjs/loaders"; // Ensure the loaders are included
+import React, { useEffect, useRef } from "react";
+import {
+  Engine,
+  Scene,
+  ArcRotateCamera,
+  Vector3,
+  HemisphericLight,
+  PointLight,
+  Mesh,
+  SceneLoader,
+  Color3,
+  StandardMaterial,
+} from "@babylonjs/core";
+import "@babylonjs/loaders";
+import "@babylonjs/gui";
+import "@babylonjs/materials";
+import "@babylonjs/serializers";
 import "@babylonjs/inspector"; // Optional, for debugging
 
-const ClientComponent: React.FC<{ models: string[] }> = ({ models }) => {
+const BabylonCanvas: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isModelLoaded, setIsModelLoaded] = useState(false);
-  const [isInVR, setIsInVR] = useState(false);
-  const modelRef = useRef<BABYLON.AbstractMesh | null>(null);
-  const xrRef = useRef<BABYLON.WebXRDefaultExperience | null>(null);
 
   useEffect(() => {
-    const initializeScene = async () => {
-      if (!canvasRef.current) return;
+    if (canvasRef.current) {
+      const engine = new Engine(canvasRef.current, true);
+      const scene = new Scene(engine);
 
-      const canvas = canvasRef.current;
-      const engine = new BABYLON.Engine(canvas, true);
+      // Set the clear color to white
+      scene.clearColor = new Color3(1, 1, 1);
 
-      const scene = new BABYLON.Scene(engine);
+      // Create a camera
+      const camera = new ArcRotateCamera("Camera", Math.PI / 2, Math.PI / 2.5, 50, Vector3.Zero(), scene);
+      camera.attachControl(canvasRef.current, true);
 
-      const camera = new BABYLON.ArcRotateCamera(
-        "camera",
-        Math.PI / 2,
-        Math.PI / 2,
-        10,
-        new BABYLON.Vector3(0, 2, 0),
-        scene,
-      );
-      camera.attachControl(canvas, true);
-      camera.wheelDeltaPercentage = 0.01;
+      // Create a hemispheric light
+      const hemisphericLight = new HemisphericLight("hemilight", new Vector3(0, 1, 0), scene);
+      hemisphericLight.intensity = 0.6;
 
-      new BABYLON.HemisphericLight("light1", new BABYLON.Vector3(1, 1, 0), scene).intensity = 0.8;
+      // Create a point light
+      const pointLight = new PointLight("pointLight", new Vector3(0, 50, -50), scene);
+      pointLight.intensity = 0.6;
 
-      scene.clearColor = new BABYLON.Color4(1, 1, 1, 1);
+      // Create ground with a white material
+      const ground = Mesh.CreateGround("ground", 500, 500, 10, scene);
+      const groundMaterial = new StandardMaterial("groundMat", scene);
+      groundMaterial.diffuseColor = new Color3(1, 1, 1); // White color
+      ground.material = groundMaterial;
 
-      BABYLON.DracoCompression.Configuration = {
-        decoder: {
-          wasmUrl: "https://cdn.jsdelivr.net/npm/draco3dgltf@1.4.1/draco_decoder.wasm",
-          wasmBinaryUrl: "https://cdn.jsdelivr.net/npm/draco3dgltf@1.4.1/draco_decoder.wasm.bin",
-          fallbackUrl: "https://cdn.jsdelivr.net/npm/draco3dgltf@1.4.1/draco_decoder.js",
-        },
+      // Load the model
+      let modelMesh: Mesh;
+      const createScene = async () => {
+        const result = await SceneLoader.ImportMeshAsync("", "/", "1mbn.gltf", scene);
+        modelMesh = result.meshes[0] as Mesh;
+        modelMesh.position.y = 30; // Position the model above the ground
+
+        const xrHelper = await scene.createDefaultXRExperienceAsync({
+          floorMeshes: [ground],
+        });
+
+        let mesh: Mesh | null = null;
+
+        xrHelper.input.onControllerAddedObservable.add((controller) => {
+          controller.onMotionControllerInitObservable.add((motionController) => {
+            if (motionController.handness === "left") {
+              const xr_ids = motionController.getComponentIds();
+              let triggerComponent = motionController.getComponent(xr_ids[0]);
+              triggerComponent.onButtonStateChangedObservable.add(() => {
+                if (triggerComponent.changes.pressed) {
+                  if (triggerComponent.pressed) {
+                    mesh = scene.meshUnderPointer as Mesh;
+                    console.log(mesh && mesh.name);
+                    if (xrHelper.pointerSelection.getMeshUnderPointer) {
+                      mesh = xrHelper.pointerSelection.getMeshUnderPointer(controller.uniqueId) as Mesh;
+                    }
+                    console.log(mesh && mesh.name);
+                    if (mesh === ground) {
+                      return;
+                    }
+                    mesh && mesh.setParent(motionController.rootMesh);
+                  } else {
+                    mesh && mesh.setParent(null);
+                  }
+                }
+              });
+            }
+          });
+        });
       };
 
-      new BABYLON.SceneOptimizer(scene).start();
-
-      const xr = await BABYLON.WebXRDefaultExperience.CreateAsync(scene);
-      xrRef.current = xr;
-      addControllerInteractions(xr);
-
-      xr.baseExperience.onStateChangedObservable.add((state) => {
-        setIsInVR(state === BABYLON.WebXRState.ENTERING_XR);
-      });
+      createScene();
 
       engine.runRenderLoop(() => {
         scene.render();
       });
 
-      const handleResize = () => engine.resize();
-      window.addEventListener("resize", handleResize);
+      window.addEventListener("resize", () => {
+        engine.resize();
+      });
 
       return () => {
-        window.removeEventListener("resize", handleResize);
         engine.dispose();
-        scene.dispose();
       };
-    };
-
-    const addControllerInteractions = (xr: BABYLON.WebXRDefaultExperience) => {
-      xr.input.onControllerAddedObservable.add((inputSource) => {
-        if (inputSource.motionController) {
-          addThumbstickComponentInteraction(inputSource);
-          addTriggerButtonInteraction(inputSource);
-          addExitVRButtonInteraction(inputSource);
-        }
-      });
-    };
-
-    const addThumbstickComponentInteraction = (inputSource: BABYLON.WebXRInputSource) => {
-      const thumbstickComponent = inputSource.motionController?.getComponent("xr-standard-thumbstick");
-      if (thumbstickComponent) {
-        thumbstickComponent.onAxisValueChangedObservable.add((values) => {
-          if (modelRef.current) {
-            modelRef.current.rotation.y += values.x * 0.1;
-
-            const forward = new BABYLON.Vector3(
-              Math.sin(modelRef.current.rotation.y),
-              0,
-              Math.cos(modelRef.current.rotation.y)
-            ).normalize();
-
-            modelRef.current.position.addInPlace(forward.scale(values.y * 0.1));
-          }
-        });
-      }
-    };
-
-    const addTriggerButtonInteraction = (inputSource: BABYLON.WebXRInputSource) => {
-      const triggerComponent = inputSource.motionController?.getComponent("xr-standard-trigger");
-
-      const scaleChange = 0.1;
-      const minScale = 0.1;
-      const maxScale = 5.0;
-
-      const scaleModel = (increase: boolean) => {
-        if (modelRef.current) {
-          const factor = increase ? scaleChange : -scaleChange;
-          modelRef.current.scaling.addInPlace(new BABYLON.Vector3(factor, factor, factor));
-
-          modelRef.current.scaling.x = BABYLON.Scalar.Clamp(modelRef.current.scaling.x, minScale, maxScale);
-          modelRef.current.scaling.y = BABYLON.Scalar.Clamp(modelRef.current.scaling.y, minScale, maxScale);
-          modelRef.current.scaling.z = BABYLON.Scalar.Clamp(modelRef.current.scaling.z, minScale, maxScale);
-        }
-      };
-
-      if (triggerComponent) {
-        triggerComponent.onButtonStateChangedObservable.add((component) => {
-          if (component.pressed) {
-            scaleModel(true);  // Scale up when the trigger is pressed
-          } else {
-            scaleModel(false); // Scale down when the trigger is released
-          }
-        });
-      }
-    };
-
-    const addExitVRButtonInteraction = (inputSource: BABYLON.WebXRInputSource) => {
-      const exitButtonPressHandler = (component: BABYLON.WebXRControllerComponent) => {
-        if (component.pressed) {
-          exitVR();
-        }
-      };
-
-      inputSource.motionController?.getComponent("b-button")?.onButtonStateChangedObservable.add(exitButtonPressHandler);
-      inputSource.motionController?.getComponent("y-button")?.onButtonStateChangedObservable.add(exitButtonPressHandler);
-    };
-
-    initializeScene();
-  }, []);
-
-  const loadModel = useCallback(() => {
-    const scene = BABYLON.EngineStore.LastCreatedScene;
-    if (!scene) return;
-
-    if (isModelLoaded) {
-      modelRef.current?.dispose();
-      modelRef.current = null;
-      setIsModelLoaded(false);
-      return;
     }
-
-    const assetsManager = new BABYLON.AssetsManager(scene);
-    const glbTask = assetsManager.addMeshTask("glbTask", "", "/", models[0]); // Using the first model
-
-    glbTask.onSuccess = (task) => {
-      task.loadedMeshes.forEach((mesh) => {
-        mesh.position = new BABYLON.Vector3(0, 0, 0);
-        modelRef.current = mesh;
-      });
-      setIsModelLoaded(true);
-    };
-
-    glbTask.onError = (task, message, exception) => {
-      console.error("Error loading GLB model", message, exception);
-    };
-
-    assetsManager.load();
-  }, [isModelLoaded, models]);
-
-  const exitVR = useCallback(() => {
-    xrRef.current?.baseExperience.exitXRAsync();
   }, []);
 
-  return (
-    <div className="relative w-full h-full">
-      <canvas ref={canvasRef} className="w-full h-full" />
-      <button
-        onClick={loadModel}
-        className={`absolute top-2 left-2 z-10 p-4 text-xl font-semibold text-white rounded ${isModelLoaded ? "bg-red-500" : "bg-blue-500"}`}
-      >
-        {isModelLoaded ? "Unload Model" : "Load Model"}
-      </button>
-    </div>
-  );
+  return <canvas ref={canvasRef} style={{ width: "100%", height: "100%" }} />;
 };
 
-export default ClientComponent;
+export default BabylonCanvas;

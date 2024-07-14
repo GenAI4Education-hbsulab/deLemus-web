@@ -20,9 +20,13 @@
     "test": "jest --config ./jest.config.js --passWithNoTests"
   },
   "dependencies": {
-    "@babylonjs/core": "^7.14.0",
+    "@babylonjs/core": "^7.15.0",
+    "@babylonjs/gui": "^7.15.0",
     "@babylonjs/inspector": "^7.15.0",
-    "@babylonjs/loaders": "^7.14.0",
+    "@babylonjs/loaders": "^7.15.0",
+    "@babylonjs/materials": "^7.15.0",
+    "@babylonjs/serializers": "^7.15.0",
+    "@babylonjs/viewer": "^7.15.0",
     "@clerk/nextjs": "^5.1.5",
     "@hookform/resolvers": "^3.4.2",
     "@prisma/client": "^5.15.0",
@@ -30,14 +34,17 @@
     "@radix-ui/react-label": "^2.0.2",
     "@radix-ui/react-popover": "^1.0.7",
     "@radix-ui/react-slot": "^1.0.2",
+    "@types/babylonjs": "^2.4.1",
     "@uploadthing/react": "^6.6.0",
+    "@webcomponents/webcomponentsjs": "^2.8.0",
     "aframe": "^1.6.0",
     "aframe-event-set-component": "^5.0.0",
     "aframe-react": "^4.4.0",
-    "@webcomponents/webcomponentsjs": "^2.8.0",
     "autoprefixer": "^10.4.19",
     "axios": "^1.7.2",
     "babel-polyfill": "^6.26.0",
+    "babylonjs": "^7.15.0",
+    "babylonjs-loaders": "^7.15.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
@@ -74,6 +81,6 @@
     "prisma": "^5.14.0",
     "tailwindcss": "^3.4.1",
     "ts-jest": "^29.1.4",
-    "typescript": "^5.4.5"
+    "typescript": "^5.5.3"
   }
 }
