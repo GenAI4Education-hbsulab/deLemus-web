@@ -6,7 +6,6 @@ import {
   ArcRotateCamera,
   Vector3,
   HemisphericLight,
-  PointLight,
   Mesh,
   SceneLoader,
   Color3,
@@ -22,94 +21,98 @@ import "@babylonjs/inspector"; // Optional, for debugging
 
 const BabylonCanvas: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const originalPositions = useRef<Map<string, Vector3>>(new Map());
 
   useEffect(() => {
     const initializeBabylon = async () => {
-      if (canvasRef.current) {
-        const engine = new Engine(canvasRef.current, true);
-        const scene = new Scene(engine);
+      if (!canvasRef.current) return;
 
-        // Set the clear color to white
-        scene.clearColor = new Color4(1, 1, 1, 1);
+      const engine = new Engine(canvasRef.current, true);
+      const scene = new Scene(engine);
 
-        // Create a camera
-        const camera = new ArcRotateCamera("Camera", Math.PI / 2, Math.PI / 2.5, 50, Vector3.Zero(), scene);
-        camera.attachControl(canvasRef.current, true);
+      // Set the clear color to white
+      scene.clearColor = new Color4(1, 1, 1, 1);
 
-        // Create a hemispheric light
-        const hemisphericLight = new HemisphericLight("hemilight", new Vector3(0, 1, 0), scene);
-        hemisphericLight.intensity = 0.6;
+      // Create a camera
+      const camera = new ArcRotateCamera("Camera", Math.PI / 2, Math.PI / 2.5, 50, Vector3.Zero(), scene);
+      camera.attachControl(canvasRef.current, true);
 
-        // Create a point light
-        const pointLight = new PointLight("pointLight", new Vector3(0, 50, -50), scene);
-        pointLight.intensity = 0.6;
+      // Create a hemispheric light
+      const hemisphericLight = new HemisphericLight("hemilight", new Vector3(0, 1, 0), scene);
+      hemisphericLight.intensity = 0.6;
 
-        // Create ground with a white material
-        const ground = Mesh.CreateGround("ground", 500, 500, 10, scene);
-        const groundMaterial = new StandardMaterial("groundMat", scene);
-        groundMaterial.diffuseColor = new Color3(1, 1, 1); // White color
-        ground.material = groundMaterial;
+      // Create ground with a white material
+      const ground = Mesh.CreateGround("ground", 500, 500, 10, scene);
+      const groundMaterial = new StandardMaterial("groundMat", scene);
+      groundMaterial.diffuseColor = new Color3(1, 1, 1); // White color
+      ground.material = groundMaterial;
 
-        // Load the model
-        let modelMesh: Mesh;
-        const createScene = async () => {
-          const result = await SceneLoader.ImportMeshAsync("", "/", "1mbn.gltf", scene);
-          modelMesh = result.meshes[0] as Mesh;
-          modelMesh.position.y = 20; // Position the model above the ground
+      // Load the model and store original positions
+      const loadModel = async () => {
+        const result = await SceneLoader.ImportMeshAsync("", "/", "1mbn.gltf", scene);
+        result.meshes.forEach(mesh => {
+          originalPositions.current.set(mesh.name, mesh.position.clone());
+        });
+        return result.meshes[0] as Mesh;
+      };
 
-          // Highlight layer
-          const highlightLayer = new HighlightLayer("hl1", scene);
+      const modelMesh = await loadModel();
+      modelMesh.position.y = 20;
 
-          const xrHelper = await scene.createDefaultXRExperienceAsync({
-            floorMeshes: [ground],
-          });
+      // Highlight layer
+      const highlightLayer = new HighlightLayer("hl1", scene);
 
-          let mesh: Mesh | null = null;
+      // XR experience
+      const xrHelper = await scene.createDefaultXRExperienceAsync({
+        floorMeshes: [ground],
+      });
 
-          xrHelper.input.onControllerAddedObservable.add((controller) => {
-            controller.onMotionControllerInitObservable.add((motionController) => {
-              if (motionController.handness === "left" || motionController.handness === "right") {
-                const xr_ids = motionController.getComponentIds();
-                let triggerComponent = motionController.getComponent(xr_ids[0]);
-                triggerComponent.onButtonStateChangedObservable.add(() => {
-                  if (triggerComponent.changes.pressed) {
-                    if (triggerComponent.pressed) {
-                      if (xrHelper.pointerSelection.getMeshUnderPointer) {
-                        mesh = xrHelper.pointerSelection.getMeshUnderPointer(controller.uniqueId) as Mesh;
-                      } else {
-                        mesh = scene.meshUnderPointer as Mesh;
-                      }
-                      if (mesh && mesh !== ground) {
-                        mesh.setParent(motionController.rootMesh);
-                        // Highlight the model when picked up
-                        highlightLayer.addMesh(mesh, Color3.Yellow());
-                      }
-                    } else if (mesh) {
-                      mesh.setParent(null);
-                      // Remove highlight when released
-                      highlightLayer.removeMesh(mesh);
-                    }
-                  }
-                });
+      xrHelper.input.onControllerAddedObservable.add((controller) => {
+        controller.onMotionControllerInitObservable.add((motionController) => {
+          const triggerComponent = motionController.getComponent("xr-standard-trigger");
+          const resetButtonComponent = motionController.getComponent("xr-standard-squeeze");
+
+          // Handle trigger for grabbing and highlighting
+          triggerComponent.onButtonStateChangedObservable.add(() => {
+            if (!triggerComponent.changes.pressed) return;
+
+            const meshUnderPointer = xrHelper.pointerSelection.getMeshUnderPointer?.(controller.uniqueId) || scene.meshUnderPointer;
+            if (meshUnderPointer && meshUnderPointer !== ground && meshUnderPointer instanceof Mesh) {
+              if (triggerComponent.pressed) {
+                meshUnderPointer.setParent(motionController.rootMesh);
+                highlightLayer.addMesh(meshUnderPointer, Color3.Yellow());
+              } else {
+                meshUnderPointer.setParent(null);
+                highlightLayer.removeMesh(meshUnderPointer);
               }
-            });
+            }
           });
-        };
 
-        createScene();
-
-        engine.runRenderLoop(() => {
-          scene.render();
+          // Handle reset button to reset positions
+          resetButtonComponent.onButtonStateChangedObservable.add(() => {
+            if (resetButtonComponent.changes.pressed && resetButtonComponent.pressed) {
+              originalPositions.current.forEach((position, name) => {
+                const part = scene.getMeshByName(name);
+                if (part) part.position = position.clone();
+              });
+            }
+          });
         });
+      });
 
-        window.addEventListener("resize", () => {
-          engine.resize();
-        });
+      // Render loop
+      engine.runRenderLoop(() => {
+        scene.render();
+      });
 
-        return () => {
-          engine.dispose();
-        };
-      }
+      // Handle resize
+      window.addEventListener("resize", () => {
+        engine.resize();
+      });
+
+      return () => {
+        engine.dispose();
+      };
     };
 
     initializeBabylon();
