@@ -11,6 +11,7 @@ import {
   SceneLoader,
   Color3,
   StandardMaterial,
+  Color4,
 } from "@babylonjs/core";
 import "@babylonjs/loaders";
 import "@babylonjs/gui";
@@ -27,7 +28,7 @@ const BabylonCanvas: React.FC = () => {
       const scene = new Scene(engine);
 
       // Set the clear color to white
-      scene.clearColor = new Color3(1, 1, 1);
+      scene.clearColor = new Color4(1, 1, 1, 1);
 
       // Create a camera
       const camera = new ArcRotateCamera("Camera", Math.PI / 2, Math.PI / 2.5, 50, Vector3.Zero(), scene);

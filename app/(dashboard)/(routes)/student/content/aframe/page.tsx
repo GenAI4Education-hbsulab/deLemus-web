@@ -15,7 +15,7 @@ export default function Home() {
                 <meta name="description" content="Babylon.js with Next.js" />
                 <link rel="icon" href="/favicon.ico" />
             </Head>
-            <BabylonScene {...{ models }} />
+            <BabylonScene  />
         </div>
     );
 }
