@@ -1,17 +1,19 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { AssistantStream } from "openai/lib/AssistantStream";
 import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, SceneLoader, TransformNode, PointLight, KeyboardEventTypes } from "@babylonjs/core";
 import "@babylonjs/loaders";
 import ReactMarkdown from 'react-markdown';
+import { AdvancedDynamicTexture, Button } from "@babylonjs/gui";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
+import { FaGraduationCap, FaChalkboardTeacher } from 'react-icons/fa';
 
 type MessageType = {
-  role: "user" | "assistant";
-  content: string;
+    role: "user" | "assistant";
+    content: string;
 };
 
 interface CodeProps {
@@ -19,28 +21,33 @@ interface CodeProps {
     inline?: boolean;
     className?: string;
     children?: React.ReactNode;
-    [key: string]: any;
 }
 
 const AvatarSceneContent: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [userInput, setUserInput] = useState("");
+    const [userInput, setUserInput] = useState<string>("");
     const [messages, setMessages] = useState<MessageType[]>([]);
     const [threadId, setThreadId] = useState<string>("");
     const [inputDisabled, setInputDisabled] = useState<boolean>(false);
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        // Initialize thread
-        const createThread = async () => {
+    const initializeThread = useCallback(async () => {
+        try {
             const res = await fetch(`/api/assistants/threads`, { method: "POST" });
-            const data = await res.json();
+            const data: { threadId: string } = await res.json();
             setThreadId(data.threadId);
-        };
-        createThread();
+        } catch (error) {
+            console.error("Failed to initialize thread:", error);
+        }
+    }, []);
 
-        // Initialize 3D scene
+    useEffect(() => {
+        initializeThread();
+    }, [initializeThread]);
+
+    useEffect(() => {
         if (!canvasRef.current) return;
+
         const engine = new Engine(canvasRef.current, true);
         const scene = new Scene(engine);
 
@@ -48,7 +55,7 @@ const AvatarSceneContent: React.FC = () => {
         const preventDefault = (e: Event) => e.preventDefault();
         canvasRef.current.addEventListener("wheel", preventDefault, { passive: false });
         canvasRef.current.addEventListener("touchmove", preventDefault, { passive: false });
-        
+
         // Camera setup
         const camera = new ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 10, Vector3.Zero(), scene);
         camera.attachControl(canvasRef.current, true);
@@ -58,7 +65,7 @@ const AvatarSceneContent: React.FC = () => {
 
         // Lighting
         new HemisphericLight("light", new Vector3(0, 1, 0), scene);
-        const pointLight = new PointLight("pointLight", new Vector3(0, 5, -5), scene);
+        new PointLight("pointLight", new Vector3(0, 5, -5), scene);
 
         // Load environment
         SceneLoader.Append("/", "classroom.glb", scene, (scene) => {
@@ -82,16 +89,42 @@ const AvatarSceneContent: React.FC = () => {
             });
         });
 
+        // Create a GUI layer
+        const guiTexture = AdvancedDynamicTexture.CreateFullscreenUI("UI");
+
+        // Create Enter VR button
+        const enterVRButton = Button.CreateSimpleButton("enterVR", "Enter VR");
+        enterVRButton.width = "150px";
+        enterVRButton.height = "40px";
+        enterVRButton.color = "white";
+        enterVRButton.cornerRadius = 20;
+        enterVRButton.background = "green";
+        enterVRButton.verticalAlignment = Button.VERTICAL_ALIGNMENT_BOTTOM;
+        enterVRButton.horizontalAlignment = Button.HORIZONTAL_ALIGNMENT_RIGHT;
+        enterVRButton.top = "-20px";
+        enterVRButton.left = "-20px";
+        guiTexture.addControl(enterVRButton);
+
         // VR setup
-        scene.createDefaultXRExperienceAsync().then((xrExperience) => {
+        scene.createDefaultXRExperienceAsync({
+            uiOptions: {
+                sessionMode: "immersive-ar",
+            },
+        }).then((xrExperience) => {
+            enterVRButton.onPointerUpObservable.add(() => {
+                xrExperience.baseExperience.enterXRAsync("immersive-vr", "local-floor");
+            });
+
             xrExperience.input.onControllerAddedObservable.add((controller) => {
                 controller.onMotionControllerInitObservable.add((motionController) => {
                     const triggerComponent = motionController.getComponent("trigger");
-                    triggerComponent.onButtonStateChangedObservable.add(() => {
-                        if (triggerComponent.pressed) {
-                            handleUserInput();
-                        }
-                    });
+                    if (triggerComponent) {
+                        triggerComponent.onButtonStateChangedObservable.add(() => {
+                            if (triggerComponent.pressed) {
+                                handleUserInput();
+                            }
+                        });
+                    }
                 });
             });
         });
@@ -116,13 +149,18 @@ const AvatarSceneContent: React.FC = () => {
     }, []);
 
     const sendMessage = async (text: string) => {
-        const response = await fetch(`/api/assistants/threads/${threadId}/messages`, {
-            method: "POST",
-            body: JSON.stringify({ content: text }),
-        });
-        if (response.body) {
-            const stream = AssistantStream.fromReadableStream(response.body);
-            handleStream(stream);
+        try {
+            const response = await fetch(`/api/assistants/threads/${threadId}/messages`, {
+                method: "POST",
+                body: JSON.stringify({ content: text }),
+            });
+            if (response.body) {
+                const stream = AssistantStream.fromReadableStream(response.body);
+                handleStream(stream);
+            }
+        } catch (error) {
+            console.error("Failed to send message:", error);
+            setInputDisabled(false);
         }
     };
 
@@ -131,7 +169,7 @@ const AvatarSceneContent: React.FC = () => {
         stream.on("textCreated", () => {
             setMessages(prev => [...prev, { role: "assistant", content: "" }]);
         });
-        stream.on("textDelta", (delta: any) => {
+        stream.on("textDelta", (delta: { value?: string }) => {
             if (delta.value) {
                 assistantResponse += delta.value;
                 setMessages(prev => {
@@ -141,23 +179,23 @@ const AvatarSceneContent: React.FC = () => {
                 });
             }
         });
-        stream.on("event", (event: any) => {
+        stream.on("event", (event: { event: string }) => {
             if (event.event === "thread.run.completed") setInputDisabled(false);
         });
     };
 
-    const handleUserInput = async () => {
+    const handleUserInput = useCallback(async () => {
         if (userInput.trim()) {
             setMessages(prev => [...prev, { role: "user", content: userInput }]);
             setUserInput("");
             setInputDisabled(true);
             await sendMessage(userInput);
         }
-    };
+    }, [userInput]);
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Enter") {
+            if (event.key === "Enter" && !inputDisabled) {
                 handleUserInput();
             }
         };
@@ -167,7 +205,7 @@ const AvatarSceneContent: React.FC = () => {
         return () => {
             window.removeEventListener("keydown", handleKeyDown);
         };
-    }, [handleUserInput]);
+    }, [handleUserInput, inputDisabled]);
 
     useEffect(() => {
         if (chatContainerRef.current) {
@@ -175,13 +213,16 @@ const AvatarSceneContent: React.FC = () => {
         }
     }, [messages]);
 
-    const renderMessage = (msg: MessageType ,id  :number) => (
+    const renderMessage = (msg: MessageType, id: number) => (
         <div key={id} className={`mb-4 p-3 rounded-lg ${msg.role === 'user' ? 'bg-blue-100' : 'bg-green-100'} max-w-full break-words`}>
-            <strong className="font-bold">{msg.role === "user" ? "You" : "Avatar"}:</strong>
+            <div className="flex items-center mb-2">
+                {msg.role === 'user' ? <FaGraduationCap className="mr-2" /> : <FaChalkboardTeacher className="mr-2" />}
+                <strong className="font-bold">{msg.role === "user" ? "Student" : "Teacher"}:</strong>
+            </div>
             <ReactMarkdown
                 className="mt-2"
                 components={{
-                    code({node, inline, className, children, ...props}: any) {
+                    code({ node, inline, className, children, ...props }: CodeProps) {
                         const match = /language-(\w+)/.exec(className || '')
                         return !inline && match ? (
                             <SyntaxHighlighter
@@ -198,19 +239,19 @@ const AvatarSceneContent: React.FC = () => {
                             </code>
                         )
                     },
-                    p: ({children}) => <p className="mb-2 max-w-full break-words">{children}</p>,
-                    h1: ({children}) => <h1 className="text-2xl font-bold mb-2">{children}</h1>,
-                    h2: ({children}) => <h2 className="text-xl font-bold mb-2">{children}</h2>,
-                    h3: ({children}) => <h3 className="text-lg font-semibold mb-2">{children}</h3>,
-                    ul: ({children}) => <ul className="list-disc pl-5 mb-2">{children}</ul>,
-                    ol: ({children}) => <ol className="list-decimal pl-5 mb-2">{children}</ol>,
-                    li: ({children}) => <li className="mb-1">{children}</li>,
-                    blockquote: ({children}) => <blockquote className="border-l-4 border-gray-400 pl-4 italic my-2">{children}</blockquote>,
-                    a: ({href, children}) => <a href={href} className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
-                    img: ({src, alt}) => <img src={src} alt={alt} className="max-w-full h-auto my-2 rounded" />,
-                    table: ({children}) => <div className="overflow-x-auto"><table className="table-auto border-collapse border border-gray-300 my-2">{children}</table></div>,
-                    th: ({children}) => <th className="border border-gray-300 px-4 py-2 bg-gray-100">{children}</th>,
-                    td: ({children}) => <td className="border border-gray-300 px-4 py-2">{children}</td>,
+                    p: ({ children }) => <p className="mb-2 max-w-full break-words">{children}</p>,
+                    h1: ({ children }) => <h1 className="text-2xl font-bold mb-2">{children}</h1>,
+                    h2: ({ children }) => <h2 className="text-xl font-bold mb-2">{children}</h2>,
+                    h3: ({ children }) => <h3 className="text-lg font-semibold mb-2">{children}</h3>,
+                    ul: ({ children }) => <ul className="list-disc pl-5 mb-2">{children}</ul>,
+                    ol: ({ children }) => <ol className="list-decimal pl-5 mb-2">{children}</ol>,
+                    li: ({ children }) => <li className="mb-1">{children}</li>,
+                    blockquote: ({ children }) => <blockquote className="border-l-4 border-gray-400 pl-4 italic my-2">{children}</blockquote>,
+                    a: ({ href, children }) => <a href={href} className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
+                    img: ({ src, alt }) => <img src={src} alt={alt} className="max-w-full h-auto my-2 rounded" />,
+                    table: ({ children }) => <div className="overflow-x-auto"><table className="table-auto border-collapse border border-gray-300 my-2">{children}</table></div>,
+                    th: ({ children }) => <th className="border border-gray-300 px-4 py-2 bg-gray-100">{children}</th>,
+                    td: ({ children }) => <td className="border border-gray-300 px-4 py-2">{children}</td>,
                 }}
                 remarkPlugins={[remarkGfm]}
             >
@@ -223,6 +264,12 @@ const AvatarSceneContent: React.FC = () => {
         <div className="flex w-full h-[90vh]">
             <canvas ref={canvasRef} className="w-[70%] h-full" />
             <div className="w-[30%] h-full flex flex-col p-4 bg-gray-100">
+                {messages.length === 0 && (
+                    <div className="mb-4 p-3 bg-yellow-100 rounded-lg">
+                        <p className="font-bold">Welcome to the Virtual Classroom!</p>
+                        <p>Feel free to ask the teacher any questions about your studies. I'm here to help!</p>
+                    </div>
+                )}
                 <div ref={chatContainerRef} className="flex-1 overflow-y-auto mb-4 max-h-[calc(90vh-100px)]">
                     {messages.map(renderMessage)}
                 </div>
@@ -231,13 +278,12 @@ const AvatarSceneContent: React.FC = () => {
                         type="text"
                         value={userInput}
                         onChange={(e) => setUserInput(e.target.value)}
-                        placeholder="Ask the avatar a question..."
-                        onKeyDown={(e) => e.key === "Enter" && handleUserInput()}
+                        placeholder="Ask the teacher a question..."
                         disabled={inputDisabled}
                         className="flex-1 p-2 mr-2 border rounded"
                     />
-                    <button 
-                        onClick={handleUserInput} 
+                    <button
+                        onClick={handleUserInput}
                         disabled={inputDisabled}
                         className="px-4 py-2 bg-green-500 text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
                     >

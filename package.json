@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@babylonjs/core": "^7.15.0",
-    "@babylonjs/gui": "^7.15.0",
+    "@babylonjs/gui": "^7.16.0",
     "@babylonjs/inspector": "^7.15.0",
     "@babylonjs/loaders": "^7.15.0",
     "@babylonjs/materials": "^7.15.0",
@@ -60,6 +60,7 @@
     "react-dom": "^18",
     "react-hook-form": "^7.51.5",
     "react-hot-toast": "^2.4.1",
+    "react-icons": "^5.2.1",
     "react-markdown": "^9.0.1",
     "react-syntax-highlighter": "^15.5.0",
     "remark-gfm": "^4.0.0",
