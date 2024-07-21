@@ -4,11 +4,23 @@ import React, { useState, useEffect, useRef } from "react";
 import { AssistantStream } from "openai/lib/AssistantStream";
 import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, SceneLoader, TransformNode, PointLight, KeyboardEventTypes } from "@babylonjs/core";
 import "@babylonjs/loaders";
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import remarkGfm from 'remark-gfm';
 
 type MessageType = {
   role: "user" | "assistant";
   content: string;
 };
+
+interface CodeProps {
+    node?: any;
+    inline?: boolean;
+    className?: string;
+    children?: React.ReactNode;
+    [key: string]: any;
+}
 
 const AvatarSceneContent: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -163,27 +175,75 @@ const AvatarSceneContent: React.FC = () => {
         }
     }, [messages]);
 
+    const renderMessage = (msg: MessageType ,id  :number) => (
+        <div key={id} className={`mb-4 p-3 rounded-lg ${msg.role === 'user' ? 'bg-blue-100' : 'bg-green-100'} max-w-full break-words`}>
+            <strong className="font-bold">{msg.role === "user" ? "You" : "Avatar"}:</strong>
+            <ReactMarkdown
+                className="mt-2"
+                components={{
+                    code({node, inline, className, children, ...props}: any) {
+                        const match = /language-(\w+)/.exec(className || '')
+                        return !inline && match ? (
+                            <SyntaxHighlighter
+                                style={atomDark}
+                                language={match[1]}
+                                PreTag="div"
+                                {...props}
+                            >
+                                {String(children).replace(/\n$/, '')}
+                            </SyntaxHighlighter>
+                        ) : (
+                            <code className={`${className} bg-gray-100 rounded px-1`} {...props}>
+                                {children}
+                            </code>
+                        )
+                    },
+                    p: ({children}) => <p className="mb-2 max-w-full break-words">{children}</p>,
+                    h1: ({children}) => <h1 className="text-2xl font-bold mb-2">{children}</h1>,
+                    h2: ({children}) => <h2 className="text-xl font-bold mb-2">{children}</h2>,
+                    h3: ({children}) => <h3 className="text-lg font-semibold mb-2">{children}</h3>,
+                    ul: ({children}) => <ul className="list-disc pl-5 mb-2">{children}</ul>,
+                    ol: ({children}) => <ol className="list-decimal pl-5 mb-2">{children}</ol>,
+                    li: ({children}) => <li className="mb-1">{children}</li>,
+                    blockquote: ({children}) => <blockquote className="border-l-4 border-gray-400 pl-4 italic my-2">{children}</blockquote>,
+                    a: ({href, children}) => <a href={href} className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
+                    img: ({src, alt}) => <img src={src} alt={alt} className="max-w-full h-auto my-2 rounded" />,
+                    table: ({children}) => <div className="overflow-x-auto"><table className="table-auto border-collapse border border-gray-300 my-2">{children}</table></div>,
+                    th: ({children}) => <th className="border border-gray-300 px-4 py-2 bg-gray-100">{children}</th>,
+                    td: ({children}) => <td className="border border-gray-300 px-4 py-2">{children}</td>,
+                }}
+                remarkPlugins={[remarkGfm]}
+            >
+                {msg.content}
+            </ReactMarkdown>
+        </div>
+    );
+
     return (
-        <div style={{ width: "100%", height: "100vh", display: "flex", flexDirection: "row" }}>
-            <canvas ref={canvasRef} style={{ width: "70%", height: "100%" }} />
-            <div style={{ width: "30%", height: "100%", display: "flex", flexDirection: "column", padding: "10px", backgroundColor: "#f0f0f0" }}>
-                <div ref={chatContainerRef} style={{ flex: 1, overflowY: "auto", marginBottom: "10px" }}>
-                    {messages.map((msg, index) => (
-                        <div key={index} style={{ marginBottom: "10px" }}>
-                            <strong>{msg.role === "user" ? "You" : "Avatar"}:</strong> {msg.content}
-                        </div>
-                    ))}
+        <div className="flex w-full h-[90vh]">
+            <canvas ref={canvasRef} className="w-[70%] h-full" />
+            <div className="w-[30%] h-full flex flex-col p-4 bg-gray-100">
+                <div ref={chatContainerRef} className="flex-1 overflow-y-auto mb-4 max-h-[calc(90vh-100px)]">
+                    {messages.map(renderMessage)}
                 </div>
-                <input
-                    type="text"
-                    value={userInput}
-                    onChange={(e) => setUserInput(e.target.value)}
-                    placeholder="Ask the avatar a question..."
-                    style={{ width: "100%", marginBottom: "10px", padding: "5px" }}
-                    onKeyDown={(e) => e.key === "Enter" && handleUserInput()}
-                    disabled={inputDisabled}
-                />
-                <button onClick={handleUserInput} style={{ padding: "5px 10px" }} disabled={inputDisabled}>Send</button>
+                <div className="flex">
+                    <input
+                        type="text"
+                        value={userInput}
+                        onChange={(e) => setUserInput(e.target.value)}
+                        placeholder="Ask the avatar a question..."
+                        onKeyDown={(e) => e.key === "Enter" && handleUserInput()}
+                        disabled={inputDisabled}
+                        className="flex-1 p-2 mr-2 border rounded"
+                    />
+                    <button 
+                        onClick={handleUserInput} 
+                        disabled={inputDisabled}
+                        className="px-4 py-2 bg-green-500 text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
+                    >
+                        Send
+                    </button>
+                </div>
             </div>
         </div>
     );
