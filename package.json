@@ -50,6 +50,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
     "cssnano": "^7.0.2",
+    "langchain": "^0.2.10",
     "lucide-react": "^0.378.0",
     "molstar": "^4.3.0",
     "next": "^14.2.4",

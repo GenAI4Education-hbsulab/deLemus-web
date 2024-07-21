@@ -1,8 +1,13 @@
 "use client";
 import React from "react";
 import Image from "next/image";
-import MolstarViewer from "./MolstarViewer";
+import dynamic from 'next/dynamic';
 import NavigationButtons from "./button";
+
+const MolstarViewer = dynamic(() => import('./MolstarViewer'), {
+  loading: () => <p>Loading 3D viewer...</p>,
+  ssr: false
+});
 
 const JN1Overview: React.FC = () => {
   return (
