@@ -36,12 +36,15 @@ interface CodeProps {
   children?: React.ReactNode;
 }
 
+const MAX_TOKENS = 4000; // Adjust this value based on your model's limit
+
 const AvatarSceneContent: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [userInput, setUserInput] = useState<string>("");
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [threadId, setThreadId] = useState<string>("");
   const [inputDisabled, setInputDisabled] = useState<boolean>(false);
+  const [tokenCount, setTokenCount] = useState<number>(0);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
 
   const initializeThread = useCallback(async (): Promise<void> => {
@@ -155,18 +158,26 @@ const AvatarSceneContent: React.FC = () => {
     };
   }, []);
 
-  const sendMessage = async (text: string): Promise<void> => {
+  const sendMessage = async (text: string, retryCount = 0): Promise<void> => {
     try {
+      setInputDisabled(true);
+      setTokenCount(0);
+
       const response = await fetch(
         `/api/assistants/threads/${threadId}/messages`,
         {
           method: "POST",
-          body: JSON.stringify({ content: text }),
+          body: JSON.stringify({ content: text, max_tokens: MAX_TOKENS }),
         },
       );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       if (response.body !== null) {
         const stream = AssistantStream.fromReadableStream(response.body);
-        handleStream(stream);
+        await handleStream(stream);
       }
     } catch (error) {
       console.error("Failed to send message:", error);
@@ -174,24 +185,50 @@ const AvatarSceneContent: React.FC = () => {
     }
   };
 
-  const handleStream = (stream: AssistantStream): void => {
-    let assistantResponse = "";
-    stream.on("textCreated", (): void => {
-      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+  const handleStream = (stream: AssistantStream): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      let assistantResponse = "";
+      const timeout = setTimeout(() => {
+        reject(new Error("Stream timeout"));
+      }, 30000); // 30 seconds timeout
+
+      stream.on("textCreated", (): void => {
+        setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+      });
+
+      stream.on("textDelta", (delta: { value?: string }): void => {
+        if (delta.value != null) {
+          assistantResponse += delta.value;
+          setTokenCount(
+            (prevCount) => prevCount + estimateTokens(delta.value!),
+          );
+          setMessages((prev) => {
+            const newMessages = [...prev];
+            newMessages[newMessages.length - 1].content = assistantResponse;
+            return newMessages;
+          });
+        }
+      });
+
+      stream.on("event", (event: { event: string }): void => {
+        if (event.event === "thread.run.completed") {
+          clearTimeout(timeout);
+          setInputDisabled(false);
+          resolve();
+        }
+      });
+
+      stream.on("error", (error: Error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
     });
-    stream.on("textDelta", (delta: { value?: string }): void => {
-      if (delta.value != null) {
-        assistantResponse += delta.value;
-        setMessages((prev) => {
-          const newMessages = [...prev];
-          newMessages[newMessages.length - 1].content = assistantResponse;
-          return newMessages;
-        });
-      }
-    });
-    stream.on("event", (event: { event: string }): void => {
-      if (event.event === "thread.run.completed") setInputDisabled(false);
-    });
+  };
+
+  const estimateTokens = (text: string): number => {
+    // This is a very rough estimate. For more accurate results,
+    // you might want to use a tokenizer library specific to your model.
+    return Math.ceil(text.split(/\s+/).length * 1.3);
   };
 
   const handleUserInput = useCallback(async (): Promise<void> => {
@@ -346,26 +383,31 @@ const AvatarSceneContent: React.FC = () => {
         >
           {messages.map(renderMessage)}
         </div>
-        <div className="flex">
-          <input
-            type="text"
-            value={userInput}
-            onChange={(e) => {
-              setUserInput(e.target.value);
-            }}
-            placeholder="Ask the teacher a question..."
-            disabled={inputDisabled}
-            className="flex-1 p-2 mr-2 border rounded"
-          />
-          <button
-            onClick={() => {
-              void handleUserInput();
-            }}
-            disabled={inputDisabled ?? false}
-            className="px-4 py-2 bg-green-500 text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
-          >
-            Send
-          </button>
+        <div className="flex flex-col">
+          <div className="text-sm text-gray-500 mb-2">
+            Tokens: {tokenCount} / {MAX_TOKENS}
+          </div>
+          <div className="flex">
+            <input
+              type="text"
+              value={userInput}
+              onChange={(e) => {
+                setUserInput(e.target.value);
+              }}
+              placeholder="Ask the teacher a question..."
+              disabled={inputDisabled}
+              className="flex-1 p-2 mr-2 border rounded"
+            />
+            <button
+              onClick={() => {
+                void handleUserInput();
+              }}
+              disabled={inputDisabled || tokenCount >= MAX_TOKENS}
+              className="px-4 py-2 bg-green-500 text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
+            >
+              Send
+            </button>
+          </div>
         </div>
       </div>
     </div>
