@@ -68,7 +68,7 @@ const AvatarSceneContent: React.FC = () => {
     const scene = new Scene(engine);
 
     // Camera setup
-    const camera = new FlyCamera("camera", new Vector3(0, 5, -10), scene);
+    const camera = new FlyCamera("camera", new Vector3(0, 15, -10), scene);
     camera.attachControl(true);
     camera.speed = 5;
     camera.angularSensibility = 500;
@@ -119,8 +119,9 @@ const AvatarSceneContent: React.FC = () => {
           result.meshes.forEach((mesh) => {
             mesh.parent = avatarRoot;
           });
+          avatarRoot.rotation = new Vector3(0, Math.PI, 0);
           avatarRoot.scaling = new Vector3(0.1, 0.1, 0.1);
-          avatarRoot.position = new Vector3(0, 0, 0);
+          avatarRoot.position = new Vector3(-7, 2, 60);
         },
       );
     });
@@ -146,6 +147,16 @@ const AvatarSceneContent: React.FC = () => {
     window.addEventListener("keydown", hideInstruction);
     window.addEventListener("mousemove", hideInstruction);
 
+    // Prevent scrolling when spacebar is pressed
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code === "Space") {
+        event.preventDefault();
+      }
+    };
+
+    // Add event listener to the canvas
+    canvasRef.current.addEventListener("keydown", handleKeyDown);
+
     engine.runRenderLoop(() => {
       scene.render();
     });
@@ -155,6 +166,8 @@ const AvatarSceneContent: React.FC = () => {
 
     return (): void => {
       engine.dispose();
+      // Remove event listener when component unmounts
+      canvasRef.current?.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
 
@@ -366,7 +379,13 @@ const AvatarSceneContent: React.FC = () => {
 
   return (
     <div className="flex w-full h-[90vh]">
-      <canvas ref={canvasRef} className="w-[70%] h-full" tabIndex={1} />
+      <canvas
+        ref={canvasRef}
+        className="w-[70%] h-full"
+        tabIndex={1}
+        // Add onFocus to ensure canvas can receive keyboard events
+        onFocus={(e) => (e.currentTarget.style.outline = "none")}
+      />
       <div className="w-[30%] h-full flex flex-col p-4 bg-gray-100">
         {messages.length === 0 && (
           <div className="mb-4 p-3 bg-yellow-100 rounded-lg">
