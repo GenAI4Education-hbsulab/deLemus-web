@@ -1,8 +1,8 @@
-"use client";
+'use client'
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import { AssistantStream } from "openai/lib/AssistantStream";
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { AssistantStream } from 'openai/lib/AssistantStream'
 import {
   Engine,
   Scene,
@@ -13,255 +13,259 @@ import {
   TransformNode,
   PointLight,
   KeyboardEventTypes,
-  type KeyboardInfo,
-} from "@babylonjs/core";
+  type KeyboardInfo
+} from '@babylonjs/core'
 
-import "@babylonjs/loaders";
-import ReactMarkdown from "react-markdown";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { atomDark } from "react-syntax-highlighter/dist/esm/styles/prism";
-import remarkGfm from "remark-gfm";
-import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
-import { AdvancedDynamicTexture, TextBlock } from "@babylonjs/gui";
+import '@babylonjs/loaders'
+import ReactMarkdown from 'react-markdown'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import remarkGfm from 'remark-gfm'
+import { FaGraduationCap, FaChalkboardTeacher } from 'react-icons/fa'
+import { AdvancedDynamicTexture, TextBlock } from '@babylonjs/gui'
 
 interface MessageType {
-  role: "user" | "assistant";
-  content: string;
+  role: 'user' | 'assistant'
+  content: string
 }
 
 interface CodeProps {
-  node?: any;
-  inline?: boolean;
-  className?: string;
-  children?: React.ReactNode;
+  node?: any
+  inline?: boolean
+  className?: string
+  children?: React.ReactNode
 }
 
 const AvatarSceneContent: React.FC = () => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [userInput, setUserInput] = useState<string>("");
-  const [messages, setMessages] = useState<MessageType[]>([]);
-  const [threadId, setThreadId] = useState<string>("");
-  const [inputDisabled, setInputDisabled] = useState<boolean>(false);
-  const chatContainerRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const [userInput, setUserInput] = useState<string>('')
+  const [messages, setMessages] = useState<MessageType[]>([])
+  const [threadId, setThreadId] = useState<string>('')
+  const [inputDisabled, setInputDisabled] = useState<boolean>(false)
+  const chatContainerRef = useRef<HTMLDivElement | null>(null)
 
   const initializeThread = useCallback(async (): Promise<void> => {
     try {
-      const res = await fetch("/api/assistants/threads", { method: "POST" });
-      const data: { threadId: string } = await res.json();
-      setThreadId(data.threadId);
+      const res = await fetch('/api/assistants/threads', { method: 'POST' })
+      const data: { threadId: string } = await res.json()
+      setThreadId(data.threadId)
     } catch (error) {
-      console.error("Failed to initialize thread:", error);
+      console.error('Failed to initialize thread:', error)
     }
-  }, []);
+  }, [])
 
   useEffect(() => {
-    void initializeThread();
-  }, [initializeThread]);
+    void initializeThread()
+  }, [initializeThread])
 
   useEffect(() => {
-    if (canvasRef.current === null) return;
+    if (canvasRef.current === null) return
 
-    const engine = new Engine(canvasRef.current, true);
-    const scene = new Scene(engine);
+    const engine = new Engine(canvasRef.current, true)
+    const scene = new Scene(engine)
 
     // Camera setup
-    const camera = new FlyCamera("camera", new Vector3(0, 5, -10), scene);
-    camera.attachControl(true);
-    camera.speed = 5;
-    camera.angularSensibility = 500;
+    const camera = new FlyCamera('camera', new Vector3(0, 5, -10), scene)
+    camera.attachControl(true)
+    camera.speed = 0.5
+    camera.angularSensibility = 500
 
     // Custom input for ascending
-    camera.keysUp = [87]; // W
-    camera.keysDown = [83]; // S
-    camera.keysLeft = [65]; // A
-    camera.keysRight = [68]; // D
+    camera.keysUp = [87] // W
+    camera.keysDown = [83] // S
+    camera.keysLeft = [65] // A
+    camera.keysRight = [68] // D
 
-    let isSpacePressed = false;
+    let isSpacePressed = false
 
     scene.onKeyboardObservable.add((kbInfo: KeyboardInfo): void => {
       switch (kbInfo.type) {
         case KeyboardEventTypes.KEYDOWN:
-          if (kbInfo.event.code === "Space") {
-            isSpacePressed = true;
+          if (kbInfo.event.code === 'Space') {
+            isSpacePressed = true
           }
-          break;
+          break
         case KeyboardEventTypes.KEYUP:
-          if (kbInfo.event.code === "Space") {
-            isSpacePressed = false;
+          if (kbInfo.event.code === 'Space') {
+            isSpacePressed = false
           }
-          break;
+          break
       }
-    });
+    })
 
     scene.registerBeforeRender((): void => {
       if (isSpacePressed) {
-        camera.position.y += 0.5;
+        camera.position.y += 0.5
       }
-    });
+    })
 
     // Lighting
-    void new HemisphericLight("light", new Vector3(0, 1, 0), scene);
-    void new PointLight("pointLight", new Vector3(0, 5, -5), scene);
+    void new HemisphericLight('light', new Vector3(0, 1, 0), scene)
+    void new PointLight('pointLight', new Vector3(0, 5, -5), scene)
 
     // Load environment and avatar
-    void SceneLoader.AppendAsync("/", "classroom.glb", scene).then(() => {
-      const classroomRoot = scene.getNodeByName("__root__");
+    void SceneLoader.AppendAsync('/', 'classroom.glb', scene).then(() => {
+      const classroomRoot = scene.getNodeByName('__root__')
       if (classroomRoot instanceof TransformNode) {
-        classroomRoot.scaling = new Vector3(10, 10, 10);
+        classroomRoot.scaling = new Vector3(10, 10, 10)
       }
 
-      void SceneLoader.ImportMeshAsync("", "/", "avatar.glb", scene).then(
+      void SceneLoader.ImportMeshAsync('', '/', 'avatar.glb', scene).then(
         (result) => {
-          const avatarRoot = new TransformNode("avatarRoot", scene);
+          const avatarRoot = new TransformNode('avatarRoot', scene)
           result.meshes.forEach((mesh) => {
-            mesh.parent = avatarRoot;
-          });
-          avatarRoot.scaling = new Vector3(0.1, 0.1, 0.1);
-          avatarRoot.position = new Vector3(0, 0, 0);
-        },
-      );
-    });
+            mesh.parent = avatarRoot
+          })
+          avatarRoot.scaling = new Vector3(0.1, 0.1, 0.1)
+          avatarRoot.position = new Vector3(0, 0, 0)
+        }
+      )
+    })
 
     // Create a GUI layer
-    const guiTexture = AdvancedDynamicTexture.CreateFullscreenUI("UI");
+    const guiTexture = AdvancedDynamicTexture.CreateFullscreenUI('UI')
 
     // Add instruction text
-    const instructionText = new TextBlock();
+    const instructionText = new TextBlock()
     instructionText.text =
-      "Use WASD or arrow keys to move\nUse mouse to look around";
-    instructionText.color = "white";
-    instructionText.fontSize = 20;
-    instructionText.top = "20px";
-    guiTexture.addControl(instructionText);
+      'Use WASD or arrow keys to move\nUse mouse to look around'
+    instructionText.color = 'white'
+    instructionText.fontSize = 20
+    instructionText.top = '20px'
+    guiTexture.addControl(instructionText)
 
     const hideInstruction = () => {
-      instructionText.isVisible = false;
-      window.removeEventListener("keydown", hideInstruction);
-      window.removeEventListener("mousemove", hideInstruction);
-    };
+      instructionText.isVisible = false
+      window.removeEventListener('keydown', hideInstruction)
+      window.removeEventListener('mousemove', hideInstruction)
+    }
 
-    window.addEventListener("keydown", hideInstruction);
-    window.addEventListener("mousemove", hideInstruction);
+    window.addEventListener('keydown', hideInstruction)
+    window.addEventListener('mousemove', hideInstruction)
 
-    engine.runRenderLoop(() => {
-      scene.render();
-    });
-    window.addEventListener("resize", () => {
-      engine.resize();
-    });
+    engine.runRenderLoop(() => { scene.render() })
+    window.addEventListener('resize', () => { engine.resize() })
 
     return (): void => {
-      engine.dispose();
-    };
-  }, []);
+      engine.dispose()
+    }
+  }, [])
 
   const sendMessage = async (text: string): Promise<void> => {
     try {
       const response = await fetch(
         `/api/assistants/threads/${threadId}/messages`,
         {
-          method: "POST",
-          body: JSON.stringify({ content: text }),
-        },
-      );
+          method: 'POST',
+          body: JSON.stringify({ content: text })
+        }
+      )
       if (response.body !== null) {
-        const stream = AssistantStream.fromReadableStream(response.body);
-        handleStream(stream);
+        const stream = AssistantStream.fromReadableStream(response.body)
+        handleStream(stream)
       }
     } catch (error) {
-      console.error("Failed to send message:", error);
-      setInputDisabled(false);
+      console.error('Failed to send message:', error)
+      setInputDisabled(false)
     }
-  };
+  }
 
   const handleStream = (stream: AssistantStream): void => {
-    let assistantResponse = "";
-    stream.on("textCreated", (): void => {
-      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-    });
-    stream.on("textDelta", (delta: { value?: string }): void => {
+    let assistantResponse = ''
+    stream.on('textCreated', (): void => {
+      setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
+    })
+    stream.on('textDelta', (delta: { value?: string }): void => {
       if (delta.value != null) {
-        assistantResponse += delta.value;
+        assistantResponse += delta.value
         setMessages((prev) => {
-          const newMessages = [...prev];
-          newMessages[newMessages.length - 1].content = assistantResponse;
-          return newMessages;
-        });
+          const newMessages = [...prev]
+          newMessages[newMessages.length - 1].content = assistantResponse
+          return newMessages
+        })
       }
-    });
-    stream.on("event", (event: { event: string }): void => {
-      if (event.event === "thread.run.completed") setInputDisabled(false);
-    });
-  };
+    })
+    stream.on('event', (event: { event: string }): void => {
+      if (event.event === 'thread.run.completed') setInputDisabled(false)
+    })
+  }
 
   const handleUserInput = useCallback(async (): Promise<void> => {
-    if (userInput.trim() !== "") {
-      setMessages((prev) => [...prev, { role: "user", content: userInput }]);
-      setUserInput("");
-      setInputDisabled(true);
-      await sendMessage(userInput);
+    if (userInput.trim() !== '') {
+      setMessages((prev) => [...prev, { role: 'user', content: userInput }])
+      setUserInput('')
+      setInputDisabled(true)
+      await sendMessage(userInput)
     }
-  }, [userInput, sendMessage]);
+  }, [userInput, sendMessage])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === "Enter" && inputDisabled !== null && !inputDisabled) {
-        void handleUserInput();
+      if (
+        event.key === 'Enter' &&
+        inputDisabled !== null &&
+        !inputDisabled
+      ) {
+        void handleUserInput()
       }
-    };
+    }
 
-    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown)
 
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [handleUserInput, inputDisabled]);
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [handleUserInput, inputDisabled])
 
   useEffect(() => {
     if (chatContainerRef.current !== null) {
       chatContainerRef.current.scrollTop =
-        chatContainerRef.current.scrollHeight;
+        chatContainerRef.current.scrollHeight
     }
-  }, [messages]);
+  }, [messages])
 
   const renderMessage = (msg: MessageType, id: number): JSX.Element => (
     <div
       key={id}
-      className={`mb-4 p-3 rounded-lg ${msg.role === "user" ? "bg-blue-100" : "bg-green-100"} max-w-full break-words`}
+      className={`mb-4 p-3 rounded-lg ${msg.role === 'user' ? 'bg-blue-100' : 'bg-green-100'} max-w-full break-words`}
     >
       <div className="flex items-center mb-2">
-        {msg.role === "user" ? (
+        {msg.role === 'user'
+          ? (
           <FaGraduationCap className="mr-2" />
-        ) : (
+            )
+          : (
           <FaChalkboardTeacher className="mr-2" />
-        )}
+            )}
         {/* eslint-disable-next-line react/no-unescaped-entities */}
         <strong className="font-bold">
-          {msg.role === "user" ? "Student" : "Teacher"}:
+          {msg.role === 'user' ? 'Student' : 'Teacher'}:
         </strong>
       </div>
       <ReactMarkdown
         className="mt-2"
         components={{
-          code({ node, inline, className, children, ...props }: CodeProps) {
-            const match = /language-(\w+)/.exec(className ?? "");
-            return !inline && match ? (
+          code ({ node, inline, className, children, ...props }: CodeProps) {
+            const match = /language-(\w+)/.exec(className ?? '')
+            return !inline && match
+              ? (
               <SyntaxHighlighter
                 style={atomDark}
                 language={match[1]}
                 PreTag="div"
                 {...props}
               >
-                {String(children).replace(/\n$/, "")}
+                {String(children).replace(/\n$/, '')}
               </SyntaxHighlighter>
-            ) : (
+                )
+              : (
               <code
                 className={`${className} bg-gray-100 rounded px-1`}
                 {...props}
               >
                 {children}
               </code>
-            );
+                )
           },
           p: ({ children }) => (
             <p className="mb-2 max-w-full break-words">{children}</p>
@@ -318,14 +322,14 @@ const AvatarSceneContent: React.FC = () => {
           ),
           td: ({ children }) => (
             <td className="border border-gray-300 px-4 py-2">{children}</td>
-          ),
+          )
         }}
         remarkPlugins={[remarkGfm]}
       >
-        {msg.content ?? ""}
+        {msg.content ?? ''}
       </ReactMarkdown>
     </div>
-  );
+  )
 
   return (
     <div className="flex w-full h-[90vh]">
@@ -350,16 +354,14 @@ const AvatarSceneContent: React.FC = () => {
           <input
             type="text"
             value={userInput}
-            onChange={(e) => {
-              setUserInput(e.target.value);
-            }}
+            onChange={(e) => { setUserInput(e.target.value) }}
             placeholder="Ask the teacher a question..."
             disabled={inputDisabled}
             className="flex-1 p-2 mr-2 border rounded"
           />
           <button
             onClick={() => {
-              void handleUserInput();
+              void handleUserInput()
             }}
             disabled={inputDisabled ?? false}
             className="px-4 py-2 bg-green-500 text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
@@ -369,7 +371,7 @@ const AvatarSceneContent: React.FC = () => {
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default AvatarSceneContent;
+export default AvatarSceneContent
