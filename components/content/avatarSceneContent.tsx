@@ -391,8 +391,8 @@ const AvatarSceneContent: React.FC = () => {
           <div className="mb-4 p-3 bg-yellow-100 rounded-lg">
             <p className="font-bold">Welcome to the Virtual Classroom!</p>
             <p>
-              Feel free to ask the teacher any questions about your studies.
-              I@aposm here to help!
+              Feel free to ask the teacher any questions about your studies. I
+              am here to help!
             </p>
           </div>
         )}
