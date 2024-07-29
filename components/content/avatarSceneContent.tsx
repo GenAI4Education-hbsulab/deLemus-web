@@ -12,16 +12,15 @@ import {
   SceneLoader,
   TransformNode,
   PointLight,
-  KeyboardEventTypes,
-  type KeyboardInfo,
   MeshBuilder,
   ActionManager,
   ExecuteCodeAction,
-  Scalar,
   Quaternion,
-  Ray,
+  CannonJSPlugin,
+  PhysicsImpostor,
 } from "@babylonjs/core";
 
+import Cannon from "cannon"; // Import Cannon.js
 import "@babylonjs/loaders";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -29,6 +28,9 @@ import { atomDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
 import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
 import { AdvancedDynamicTexture, TextBlock } from "@babylonjs/gui";
+
+// Assign Cannon to the global window object
+window.CANNON = Cannon;
 
 interface MessageType {
   role: "user" | "assistant";
@@ -73,35 +75,49 @@ const AvatarSceneContent: React.FC = () => {
     const engine = new Engine(canvasRef.current, true);
     const scene = new Scene(engine);
 
+    // Initialize Cannon.js physics engine
+    const gravityVector = new Vector3(0, -9.81, 0); // Earth gravity
+    const physicsPlugin = new CannonJSPlugin();
+    scene.enablePhysics(gravityVector, physicsPlugin);
+
+    // Create ground
+    const ground = MeshBuilder.CreateGround(
+      "ground",
+      { width: 100, height: 100 },
+      scene,
+    );
+    ground.position.y = 0;
+    ground.physicsImpostor = new PhysicsImpostor(
+      ground,
+      PhysicsImpostor.BoxImpostor,
+      { mass: 0, restitution: 0.9 },
+      scene,
+    );
+
     // Avatar setup
     let avatar = MeshBuilder.CreateBox(
       "avatar",
       { height: 2, width: 1, depth: 1 },
       scene,
     );
-    avatar.position = new Vector3(0, 1, 0);
+    avatar.position = new Vector3(0, 1, 0); // Start slightly above ground
     avatar.rotationQuaternion = Quaternion.Identity();
 
+    // Apply a physics impostor to the avatar
+    avatar.physicsImpostor = new PhysicsImpostor(
+      avatar,
+      PhysicsImpostor.BoxImpostor,
+      { mass: 1, friction: 0.5, restitution: 0.3 },
+      scene,
+    );
+
     // Camera setup
-    const camera = new UniversalCamera("camera", new Vector3(0, 2, -10), scene);
+    const camera = new UniversalCamera("camera", new Vector3(0, 5, -10), scene);
     camera.setTarget(avatar.position);
+    camera.attachControl(canvasRef.current, true);
 
-    // Camera parent for smooth following
-    const camRoot = new TransformNode("root");
-    camRoot.position = avatar.position.clone();
-    camRoot.rotation = new Vector3(0, Math.PI, 0);
-    camera.parent = camRoot;
-
-    // Movement variables
-    let moveDirection = Vector3.Zero();
+    // Movement controls setup
     let inputMap: { [key: string]: boolean } = {};
-    let grounded = false;
-    let jumpCount = 0;
-    const PLAYER_SPEED = 0.1;
-    const JUMP_FORCE = 0.2;
-    const GRAVITY = -0.005;
-
-    // Movement controls
     scene.actionManager = new ActionManager(scene);
     scene.actionManager.registerAction(
       new ExecuteCodeAction(ActionManager.OnKeyDownTrigger, (evt) => {
@@ -114,81 +130,35 @@ const AvatarSceneContent: React.FC = () => {
       }),
     );
 
-    // Update movement and camera
-    scene.registerBeforeRender(() => {
-      let deltaTime = engine.getDeltaTime() / 1000;
+    // Update loop
+    scene.onBeforeRenderObservable.add(() => {
+      if (avatar.physicsImpostor) {
+        let moveDirection = Vector3.Zero();
+        if (inputMap["w"] || inputMap["ArrowUp"]) moveDirection.z += 1;
+        if (inputMap["s"] || inputMap["ArrowDown"]) moveDirection.z -= 1;
+        if (inputMap["a"] || inputMap["ArrowLeft"]) moveDirection.x -= 1;
+        if (inputMap["d"] || inputMap["ArrowRight"]) moveDirection.x += 1;
 
-      // Update movement
-      moveDirection = Vector3.Zero();
-      if (inputMap["w"] || inputMap["ArrowUp"]) moveDirection.z += 1;
-      if (inputMap["s"] || inputMap["ArrowDown"]) moveDirection.z -= 1;
-      if (inputMap["a"] || inputMap["ArrowLeft"]) moveDirection.x -= 1;
-      if (inputMap["d"] || inputMap["ArrowRight"]) moveDirection.x += 1;
-
-      // Normalize movement vector
-      if (moveDirection.length() > 0) {
-        moveDirection = moveDirection.normalize();
-      }
-
-      // Rotate movement based on camera angle
-      let angle = camRoot.rotation.y;
-      let rotatedMovement = new Vector3(
-        moveDirection.x * Math.cos(angle) + moveDirection.z * Math.sin(angle),
-        0,
-        moveDirection.z * Math.cos(angle) - moveDirection.x * Math.sin(angle),
-      );
-
-      // Apply movement
-      avatar.position.addInPlace(rotatedMovement.scale(PLAYER_SPEED));
-
-      // Jumping
-      if (inputMap[" "] && grounded) {
-        avatar.position.y += JUMP_FORCE;
-        grounded = false;
-        jumpCount = 1;
-      }
-
-      // Gravity
-      if (!grounded) {
-        avatar.position.y += GRAVITY * deltaTime;
-      }
-
-      // Ground check
-      let origin = avatar.position.clone();
-      origin.y += 0.5;
-      let ray = new Ray(origin, Vector3.Down(), 1.1);
-      let pick = scene.pickWithRay(ray);
-
-      if (pick && pick.hit && pick.distance <= 0.6) {
-        grounded = true;
-        avatar.position.y = pick.pickedPoint!.y + 1;
-        jumpCount = 0;
-      } else {
-        grounded = false;
-      }
-
-      // Rotate avatar to face movement direction
-      if (rotatedMovement.length() > 0) {
-        let targetRotation = Math.atan2(rotatedMovement.x, rotatedMovement.z);
-        let currentRotation = avatar.rotationQuaternion!.toEulerAngles().y;
-        let newRotation = Scalar.Lerp(currentRotation, targetRotation, 0.1);
-        avatar.rotationQuaternion = Quaternion.FromEulerAngles(
-          0,
-          newRotation,
-          0,
+        moveDirection = moveDirection.normalize().scale(5); // Adjust speed as needed
+        avatar.physicsImpostor.setLinearVelocity(
+          new Vector3(
+            moveDirection.x,
+            avatar.physicsImpostor.getLinearVelocity().y,
+            moveDirection.z,
+          ),
         );
+
+        if (inputMap[" "] && avatar.position.y <= 1.1) {
+          // Simple jump check
+          avatar.physicsImpostor.applyImpulse(
+            new Vector3(0, 5, 0),
+            avatar.getAbsolutePosition(),
+          );
+        }
       }
 
-      // Update camera position
-      camRoot.position = Vector3.Lerp(
-        camRoot.position,
-        new Vector3(
-          avatar.position.x,
-          avatar.position.y + 2,
-          avatar.position.z,
-        ),
-        0.4,
-      );
+      // Update camera position to follow avatar
+      camera.position = avatar.position.add(new Vector3(0, 5, -10));
     });
 
     // Lighting
@@ -200,6 +170,7 @@ const AvatarSceneContent: React.FC = () => {
       const classroomRoot = scene.getNodeByName("__root__");
       if (classroomRoot instanceof TransformNode) {
         classroomRoot.scaling = new Vector3(10, 10, 10);
+        classroomRoot.position.y = 0; // Ensure classroom is at ground level
       }
 
       void SceneLoader.ImportMeshAsync("", "/", "avatar.glb", scene).then(
@@ -210,7 +181,7 @@ const AvatarSceneContent: React.FC = () => {
           });
           avatarRoot.rotation = new Vector3(0, Math.PI, 0);
           avatarRoot.scaling = new Vector3(0.1, 0.1, 0.1);
-          avatarRoot.position = new Vector3(-7, 2, 60);
+          avatarRoot.position = new Vector3(-7, 0, 60); // Set y to 0
         },
       );
     });
