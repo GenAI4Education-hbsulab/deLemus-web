@@ -6,7 +6,7 @@ import { AssistantStream } from "openai/lib/AssistantStream";
 import {
   Engine,
   Scene,
-  FlyCamera,
+  UniversalCamera,
   Vector3,
   HemisphericLight,
   SceneLoader,
@@ -14,6 +14,12 @@ import {
   PointLight,
   KeyboardEventTypes,
   type KeyboardInfo,
+  MeshBuilder,
+  ActionManager,
+  ExecuteCodeAction,
+  Scalar,
+  Quaternion,
+  Ray,
 } from "@babylonjs/core";
 
 import "@babylonjs/loaders";
@@ -67,39 +73,122 @@ const AvatarSceneContent: React.FC = () => {
     const engine = new Engine(canvasRef.current, true);
     const scene = new Scene(engine);
 
+    // Avatar setup
+    let avatar = MeshBuilder.CreateBox(
+      "avatar",
+      { height: 2, width: 1, depth: 1 },
+      scene,
+    );
+    avatar.position = new Vector3(0, 1, 0);
+    avatar.rotationQuaternion = Quaternion.Identity();
+
     // Camera setup
-    const camera = new FlyCamera("camera", new Vector3(0, 15, -10), scene);
-    camera.attachControl(true);
-    camera.speed = 5;
-    camera.angularSensibility = 500;
+    const camera = new UniversalCamera("camera", new Vector3(0, 2, -10), scene);
+    camera.setTarget(avatar.position);
 
-    // Custom input for ascending
-    camera.keysUp = [87]; // W
-    camera.keysDown = [83]; // S
-    camera.keysLeft = [65]; // A
-    camera.keysRight = [68]; // D
+    // Camera parent for smooth following
+    const camRoot = new TransformNode("root");
+    camRoot.position = avatar.position.clone();
+    camRoot.rotation = new Vector3(0, Math.PI, 0);
+    camera.parent = camRoot;
 
-    let isSpacePressed = false;
+    // Movement variables
+    let moveDirection = Vector3.Zero();
+    let inputMap: { [key: string]: boolean } = {};
+    let grounded = false;
+    let jumpCount = 0;
+    const PLAYER_SPEED = 0.1;
+    const JUMP_FORCE = 0.2;
+    const GRAVITY = -0.005;
 
-    scene.onKeyboardObservable.add((kbInfo: KeyboardInfo): void => {
-      switch (kbInfo.type) {
-        case KeyboardEventTypes.KEYDOWN:
-          if (kbInfo.event.code === "Space") {
-            isSpacePressed = true;
-          }
-          break;
-        case KeyboardEventTypes.KEYUP:
-          if (kbInfo.event.code === "Space") {
-            isSpacePressed = false;
-          }
-          break;
+    // Movement controls
+    scene.actionManager = new ActionManager(scene);
+    scene.actionManager.registerAction(
+      new ExecuteCodeAction(ActionManager.OnKeyDownTrigger, (evt) => {
+        inputMap[evt.sourceEvent.key] = evt.sourceEvent.type === "keydown";
+      }),
+    );
+    scene.actionManager.registerAction(
+      new ExecuteCodeAction(ActionManager.OnKeyUpTrigger, (evt) => {
+        inputMap[evt.sourceEvent.key] = evt.sourceEvent.type === "keydown";
+      }),
+    );
+
+    // Update movement and camera
+    scene.registerBeforeRender(() => {
+      let deltaTime = engine.getDeltaTime() / 1000;
+
+      // Update movement
+      moveDirection = Vector3.Zero();
+      if (inputMap["w"] || inputMap["ArrowUp"]) moveDirection.z += 1;
+      if (inputMap["s"] || inputMap["ArrowDown"]) moveDirection.z -= 1;
+      if (inputMap["a"] || inputMap["ArrowLeft"]) moveDirection.x -= 1;
+      if (inputMap["d"] || inputMap["ArrowRight"]) moveDirection.x += 1;
+
+      // Normalize movement vector
+      if (moveDirection.length() > 0) {
+        moveDirection = moveDirection.normalize();
       }
-    });
 
-    scene.registerBeforeRender((): void => {
-      if (isSpacePressed) {
-        camera.position.y += 0.5;
+      // Rotate movement based on camera angle
+      let angle = camRoot.rotation.y;
+      let rotatedMovement = new Vector3(
+        moveDirection.x * Math.cos(angle) + moveDirection.z * Math.sin(angle),
+        0,
+        moveDirection.z * Math.cos(angle) - moveDirection.x * Math.sin(angle),
+      );
+
+      // Apply movement
+      avatar.position.addInPlace(rotatedMovement.scale(PLAYER_SPEED));
+
+      // Jumping
+      if (inputMap[" "] && grounded) {
+        avatar.position.y += JUMP_FORCE;
+        grounded = false;
+        jumpCount = 1;
       }
+
+      // Gravity
+      if (!grounded) {
+        avatar.position.y += GRAVITY * deltaTime;
+      }
+
+      // Ground check
+      let origin = avatar.position.clone();
+      origin.y += 0.5;
+      let ray = new Ray(origin, Vector3.Down(), 1.1);
+      let pick = scene.pickWithRay(ray);
+
+      if (pick && pick.hit && pick.distance <= 0.6) {
+        grounded = true;
+        avatar.position.y = pick.pickedPoint!.y + 1;
+        jumpCount = 0;
+      } else {
+        grounded = false;
+      }
+
+      // Rotate avatar to face movement direction
+      if (rotatedMovement.length() > 0) {
+        let targetRotation = Math.atan2(rotatedMovement.x, rotatedMovement.z);
+        let currentRotation = avatar.rotationQuaternion!.toEulerAngles().y;
+        let newRotation = Scalar.Lerp(currentRotation, targetRotation, 0.1);
+        avatar.rotationQuaternion = Quaternion.FromEulerAngles(
+          0,
+          newRotation,
+          0,
+        );
+      }
+
+      // Update camera position
+      camRoot.position = Vector3.Lerp(
+        camRoot.position,
+        new Vector3(
+          avatar.position.x,
+          avatar.position.y + 2,
+          avatar.position.z,
+        ),
+        0.4,
+      );
     });
 
     // Lighting
