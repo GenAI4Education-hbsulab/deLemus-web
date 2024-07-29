@@ -10,17 +10,16 @@ import {
   Vector3,
   HemisphericLight,
   SceneLoader,
-  TransformNode,
   PointLight,
   MeshBuilder,
   ActionManager,
   ExecuteCodeAction,
-  Quaternion,
-  CannonJSPlugin,
   PhysicsImpostor,
+  StandardMaterial,
+  Color3,
+  AmmoJSPlugin,
+  Matrix,
 } from "@babylonjs/core";
-
-import Cannon from "cannon"; // Import Cannon.js
 import "@babylonjs/loaders";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -28,9 +27,7 @@ import { atomDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
 import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
 import { AdvancedDynamicTexture, TextBlock } from "@babylonjs/gui";
-
-// Assign Cannon to the global window object
-window.CANNON = Cannon;
+import Ammo from "ammojs-typed";
 
 interface MessageType {
   role: "user" | "assistant";
@@ -75,160 +72,174 @@ const AvatarSceneContent: React.FC = () => {
     const engine = new Engine(canvasRef.current, true);
     const scene = new Scene(engine);
 
-    // Initialize Cannon.js physics engine
-    const gravityVector = new Vector3(0, -9.81, 0); // Earth gravity
-    const physicsPlugin = new CannonJSPlugin();
-    scene.enablePhysics(gravityVector, physicsPlugin);
+    Ammo().then((AmmoLib) => {
+      const ammoPlugin = new AmmoJSPlugin(true, AmmoLib);
+      scene.enablePhysics(new Vector3(0, -9.81, 0), ammoPlugin);
 
-    // Create ground
-    const ground = MeshBuilder.CreateGround(
-      "ground",
-      { width: 100, height: 100 },
-      scene,
-    );
-    ground.position.y = 0;
-    ground.physicsImpostor = new PhysicsImpostor(
-      ground,
-      PhysicsImpostor.BoxImpostor,
-      { mass: 0, restitution: 0.9 },
-      scene,
-    );
+      // Lighting
+      new HemisphericLight("light", new Vector3(0, 1, 0), scene);
+      new PointLight("pointLight", new Vector3(0, 5, -5), scene);
 
-    // Avatar setup
-    let avatar = MeshBuilder.CreateBox(
-      "avatar",
-      { height: 2, width: 1, depth: 1 },
-      scene,
-    );
-    avatar.position = new Vector3(0, 1, 0); // Start slightly above ground
-    avatar.rotationQuaternion = Quaternion.Identity();
+      // Create ground
+      const ground = MeshBuilder.CreateGround(
+        "ground",
+        { width: 100, height: 100 },
+        scene,
+      );
+      ground.position.y = 0;
 
-    // Apply a physics impostor to the avatar
-    avatar.physicsImpostor = new PhysicsImpostor(
-      avatar,
-      PhysicsImpostor.BoxImpostor,
-      { mass: 1, friction: 0.5, restitution: 0.3 },
-      scene,
-    );
+      // Apply material to ground (optional)
+      const groundMaterial = new StandardMaterial("groundMaterial", scene);
+      groundMaterial.diffuseColor = new Color3(0.5, 0.5, 0.5);
+      ground.material = groundMaterial;
 
-    // Camera setup
-    const camera = new UniversalCamera("camera", new Vector3(0, 5, -10), scene);
-    camera.setTarget(avatar.position);
-    camera.attachControl(canvasRef.current, true);
+      // Apply physics to ground
+      ground.physicsImpostor = new PhysicsImpostor(
+        ground,
+        PhysicsImpostor.BoxImpostor,
+        { mass: 0, restitution: 0.9 },
+        scene,
+      );
 
-    // Movement controls setup
-    let inputMap: { [key: string]: boolean } = {};
-    scene.actionManager = new ActionManager(scene);
-    scene.actionManager.registerAction(
-      new ExecuteCodeAction(ActionManager.OnKeyDownTrigger, (evt) => {
-        inputMap[evt.sourceEvent.key] = evt.sourceEvent.type === "keydown";
-      }),
-    );
-    scene.actionManager.registerAction(
-      new ExecuteCodeAction(ActionManager.OnKeyUpTrigger, (evt) => {
-        inputMap[evt.sourceEvent.key] = evt.sourceEvent.type === "keydown";
-      }),
-    );
-
-    // Update loop
-    scene.onBeforeRenderObservable.add(() => {
-      if (avatar.physicsImpostor) {
-        let moveDirection = Vector3.Zero();
-        if (inputMap["w"] || inputMap["ArrowUp"]) moveDirection.z += 1;
-        if (inputMap["s"] || inputMap["ArrowDown"]) moveDirection.z -= 1;
-        if (inputMap["a"] || inputMap["ArrowLeft"]) moveDirection.x -= 1;
-        if (inputMap["d"] || inputMap["ArrowRight"]) moveDirection.x += 1;
-
-        moveDirection = moveDirection.normalize().scale(5); // Adjust speed as needed
-        avatar.physicsImpostor.setLinearVelocity(
-          new Vector3(
-            moveDirection.x,
-            avatar.physicsImpostor.getLinearVelocity().y,
-            moveDirection.z,
-          ),
-        );
-
-        if (inputMap[" "] && avatar.position.y <= 1.1) {
-          // Simple jump check
-          avatar.physicsImpostor.applyImpulse(
-            new Vector3(0, 5, 0),
-            avatar.getAbsolutePosition(),
-          );
-        }
-      }
-
-      // Update camera position to follow avatar
-      camera.position = avatar.position.add(new Vector3(0, 5, -10));
-    });
-
-    // Lighting
-    void new HemisphericLight("light", new Vector3(0, 1, 0), scene);
-    void new PointLight("pointLight", new Vector3(0, 5, -5), scene);
-
-    // Load environment and avatar
-    void SceneLoader.AppendAsync("/", "classroom.glb", scene).then(() => {
-      const classroomRoot = scene.getNodeByName("__root__");
-      if (classroomRoot instanceof TransformNode) {
-        classroomRoot.scaling = new Vector3(10, 10, 10);
-        classroomRoot.position.y = 0; // Ensure classroom is at ground level
-      }
-
-      void SceneLoader.ImportMeshAsync("", "/", "avatar.glb", scene).then(
+      // Load environment
+      SceneLoader.ImportMeshAsync("", "/", "classroom.glb", scene).then(
         (result) => {
-          const avatarRoot = new TransformNode("avatarRoot", scene);
-          result.meshes.forEach((mesh) => {
-            mesh.parent = avatarRoot;
-          });
-          avatarRoot.rotation = new Vector3(0, Math.PI, 0);
-          avatarRoot.scaling = new Vector3(0.1, 0.1, 0.1);
-          avatarRoot.position = new Vector3(-7, 0, 60); // Set y to 0
+          const classroomRoot = result.meshes[0];
+          classroomRoot.scaling = new Vector3(2, 2, 2); // Increased scaling
+          classroomRoot.position.y = 0;
+
+          // Apply physics to the root mesh
+          classroomRoot.physicsImpostor = new PhysicsImpostor(
+            classroomRoot,
+            PhysicsImpostor.MeshImpostor,
+            { mass: 0, restitution: 0.9 },
+            scene,
+          );
         },
       );
+
+      // Avatar setup
+      let avatar = MeshBuilder.CreateBox(
+        "avatar",
+        { height: 2, width: 1, depth: 1 },
+        scene,
+      );
+      avatar.position = new Vector3(0, 5, 0);
+      avatar.physicsImpostor = new PhysicsImpostor(
+        avatar,
+        PhysicsImpostor.BoxImpostor,
+        { mass: 1, friction: 0.5, restitution: 0.3 },
+        scene,
+      );
+
+      // Camera setup
+      const camera = new UniversalCamera(
+        "camera",
+        new Vector3(0, 5, -10),
+        scene,
+      );
+      camera.setTarget(avatar.position);
+      camera.attachControl(canvasRef.current, true);
+
+      // Update camera position in the render loop
+      scene.onBeforeRenderObservable.add(() => {
+        camera.position = avatar.position.add(new Vector3(0, 5, -10));
+      });
+
+      // Movement controls setup
+      let inputMap: { [key: string]: boolean } = {};
+      scene.actionManager = new ActionManager(scene);
+      scene.actionManager.registerAction(
+        new ExecuteCodeAction(ActionManager.OnKeyDownTrigger, (evt) => {
+          inputMap[evt.sourceEvent.key] = evt.sourceEvent.type === "keydown";
+        }),
+      );
+      scene.actionManager.registerAction(
+        new ExecuteCodeAction(ActionManager.OnKeyUpTrigger, (evt) => {
+          inputMap[evt.sourceEvent.key] = evt.sourceEvent.type === "keydown";
+        }),
+      );
+
+      // Update loop for smoother movement
+      let moveDirection = Vector3.Zero();
+      scene.onBeforeRenderObservable.add(() => {
+        if (avatar.physicsImpostor) {
+          moveDirection = Vector3.Zero();
+          if (inputMap["w"] || inputMap["ArrowUp"]) moveDirection.z += 1;
+          if (inputMap["s"] || inputMap["ArrowDown"]) moveDirection.z -= 1;
+          if (inputMap["a"] || inputMap["ArrowLeft"]) moveDirection.x -= 1;
+          if (inputMap["d"] || inputMap["ArrowRight"]) moveDirection.x += 1;
+
+          moveDirection = Vector3.TransformCoordinates(
+            moveDirection.normalize(),
+            Matrix.RotationY(camera.rotation.y),
+          );
+
+          const currentVelocity =
+            avatar.physicsImpostor.getLinearVelocity() || Vector3.Zero();
+          const targetVelocity = moveDirection.scale(5); // Adjust speed as needed
+          const smoothedVelocity = new Vector3(
+            lerp(currentVelocity.x, targetVelocity.x, 0.1),
+            currentVelocity.y,
+            lerp(currentVelocity.z, targetVelocity.z, 0.1),
+          );
+
+          avatar.physicsImpostor.setLinearVelocity(smoothedVelocity);
+
+          if (inputMap[" "] && avatar.position.y <= 1.1) {
+            avatar.physicsImpostor.applyImpulse(
+              new Vector3(0, 2, 0),
+              avatar.getAbsolutePosition(),
+            );
+          }
+        }
+      });
+
+      // Create a GUI layer
+      const guiTexture = AdvancedDynamicTexture.CreateFullscreenUI("UI");
+
+      // Add instruction text
+      const instructionText = new TextBlock();
+      instructionText.text =
+        "Use WASD or arrow keys to move\nUse mouse to look around";
+      instructionText.color = "white";
+      instructionText.fontSize = 20;
+      instructionText.top = "20px";
+      guiTexture.addControl(instructionText);
+
+      const hideInstruction = () => {
+        instructionText.isVisible = false;
+        window.removeEventListener("keydown", hideInstruction);
+        window.removeEventListener("mousemove", hideInstruction);
+      };
+
+      window.addEventListener("keydown", hideInstruction);
+      window.addEventListener("mousemove", hideInstruction);
+
+      // Prevent scrolling when spacebar is pressed
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.code === "Space") {
+          event.preventDefault();
+        }
+      };
+
+      // Add event listener to the canvas
+      if (canvasRef.current)
+        canvasRef.current.addEventListener("keydown", handleKeyDown);
+
+      engine.runRenderLoop(() => {
+        scene.render();
+      });
+      window.addEventListener("resize", () => {
+        engine.resize();
+      });
+
+      return (): void => {
+        engine.dispose();
+        // Remove event listener when component unmounts
+        canvasRef.current?.removeEventListener("keydown", handleKeyDown);
+      };
     });
-
-    // Create a GUI layer
-    const guiTexture = AdvancedDynamicTexture.CreateFullscreenUI("UI");
-
-    // Add instruction text
-    const instructionText = new TextBlock();
-    instructionText.text =
-      "Use WASD or arrow keys to move\nUse mouse to look around";
-    instructionText.color = "white";
-    instructionText.fontSize = 20;
-    instructionText.top = "20px";
-    guiTexture.addControl(instructionText);
-
-    const hideInstruction = () => {
-      instructionText.isVisible = false;
-      window.removeEventListener("keydown", hideInstruction);
-      window.removeEventListener("mousemove", hideInstruction);
-    };
-
-    window.addEventListener("keydown", hideInstruction);
-    window.addEventListener("mousemove", hideInstruction);
-
-    // Prevent scrolling when spacebar is pressed
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code === "Space") {
-        event.preventDefault();
-      }
-    };
-
-    // Add event listener to the canvas
-    canvasRef.current.addEventListener("keydown", handleKeyDown);
-
-    engine.runRenderLoop(() => {
-      scene.render();
-    });
-    window.addEventListener("resize", () => {
-      engine.resize();
-    });
-
-    return (): void => {
-      engine.dispose();
-      // Remove event listener when component unmounts
-      canvasRef.current?.removeEventListener("keydown", handleKeyDown);
-    };
   }, []);
 
   const sendMessage = async (text: string, retryCount = 0): Promise<void> => {
@@ -492,5 +503,10 @@ const AvatarSceneContent: React.FC = () => {
     </div>
   );
 };
+
+// Add this helper function outside of your component
+function lerp(start: number, end: number, amt: number): number {
+  return (1 - amt) * start + amt * end;
+}
 
 export default AvatarSceneContent;
