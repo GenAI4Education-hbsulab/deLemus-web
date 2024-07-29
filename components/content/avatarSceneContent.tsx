@@ -19,8 +19,6 @@ import {
   Color3,
   AmmoJSPlugin,
   Matrix,
-  Quaternion,
-  Ray,
 } from "@babylonjs/core";
 import "@babylonjs/loaders";
 import ReactMarkdown from "react-markdown";
@@ -57,12 +55,6 @@ const AvatarSceneContent: React.FC = () => {
   const initializeThread = useCallback(async (): Promise<void> => {
     try {
       const res = await fetch("/api/assistants/threads", { method: "POST" });
-      const contentType = res.headers.get("content-type");
-
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("Received non-JSON response");
-      }
-
       const data: { threadId: string } = await res.json();
       setThreadId(data.threadId);
     } catch (error) {
@@ -94,7 +86,7 @@ const AvatarSceneContent: React.FC = () => {
         { width: 100, height: 100 },
         scene,
       );
-      ground.position.y = 0; // Ensure ground is at y = 0
+      ground.position.y = 0;
 
       // Apply material to ground (optional)
       const groundMaterial = new StandardMaterial("groundMaterial", scene);
@@ -109,166 +101,144 @@ const AvatarSceneContent: React.FC = () => {
         scene,
       );
 
-      // Debug log for ground
-      console.log("Ground loaded:", ground);
+      // Load environment
+      SceneLoader.ImportMeshAsync("", "/", "classroom.glb", scene).then(
+        (result) => {
+          const classroomRoot = result.meshes[0];
+          classroomRoot.scaling = new Vector3(2, 2, 2); // Increased scaling
+          classroomRoot.position.y = 0;
 
-      // Load custom avatar
-      SceneLoader.ImportMeshAsync("", "/", "user.glb", scene).then((result) => {
-        if (result.meshes.length === 0) {
-          console.error("No meshes found in the .glb file.");
-          return;
-        }
+          // Apply physics to the root mesh
+          classroomRoot.physicsImpostor = new PhysicsImpostor(
+            classroomRoot,
+            PhysicsImpostor.MeshImpostor,
+            { mass: 0, restitution: 0.9 },
+            scene,
+          );
+        },
+      );
 
-        const avatar = result.meshes[0];
-        avatar.scaling = new Vector3(1, 1, 1); // Adjust scaling as needed
-        avatar.position = new Vector3(0, 5, 0); // Ensure avatar is above the ground
+      // Avatar setup
+      let avatar = MeshBuilder.CreateBox(
+        "avatar",
+        { height: 2, width: 1, depth: 1 },
+        scene,
+      );
+      avatar.position = new Vector3(0, 5, 0);
+      avatar.physicsImpostor = new PhysicsImpostor(
+        avatar,
+        PhysicsImpostor.BoxImpostor,
+        { mass: 1, friction: 0.5, restitution: 0.3 },
+        scene,
+      );
 
-        // Apply physics impostor to the avatar
-        avatar.physicsImpostor = new PhysicsImpostor(
-          avatar,
-          PhysicsImpostor.BoxImpostor,
-          { mass: 1, friction: 0.5, restitution: 0.3 },
-          scene,
-        );
+      // Camera setup
+      const camera = new UniversalCamera(
+        "camera",
+        new Vector3(0, 5, -10),
+        scene,
+      );
+      camera.setTarget(avatar.position);
+      camera.attachControl(canvasRef.current, true);
 
-        // Debug logs for avatar
-        console.log("Avatar loaded:", avatar);
-        console.log("Avatar position:", avatar.position);
-        console.log("Avatar physics impostor:", avatar.physicsImpostor);
-
-        // Camera setup
-        const camera = new UniversalCamera(
-          "camera",
-          new Vector3(0, 5, -10),
-          scene,
-        );
-        camera.setTarget(avatar.position);
-        camera.attachControl(canvasRef.current, true);
-
-        // Update camera position in the render loop
-        scene.onBeforeRenderObservable.add(() => {
-          camera.position = avatar.position.add(new Vector3(0, 5, -10));
-        });
-
-        // Movement controls setup
-        let inputMap: { [key: string]: boolean } = {};
-        scene.actionManager = new ActionManager(scene);
-        scene.actionManager.registerAction(
-          new ExecuteCodeAction(ActionManager.OnKeyDownTrigger, (evt) => {
-            inputMap[evt.sourceEvent.key] = evt.sourceEvent.type === "keydown";
-          }),
-        );
-        scene.actionManager.registerAction(
-          new ExecuteCodeAction(ActionManager.OnKeyUpTrigger, (evt) => {
-            inputMap[evt.sourceEvent.key] = evt.sourceEvent.type === "keydown";
-          }),
-        );
-
-        // Update loop for smoother movement
-        let moveDirection = Vector3.Zero();
-        let targetRotation = avatar.rotationQuaternion || Quaternion.Identity();
-        scene.onBeforeRenderObservable.add(() => {
-          if (avatar.physicsImpostor) {
-            moveDirection = Vector3.Zero();
-            if (inputMap["w"] || inputMap["ArrowUp"]) moveDirection.z += 1;
-            if (inputMap["s"] || inputMap["ArrowDown"]) moveDirection.z -= 1;
-            if (inputMap["a"] || inputMap["ArrowLeft"]) moveDirection.x -= 1;
-            if (inputMap["d"] || inputMap["ArrowRight"]) moveDirection.x += 1;
-
-            moveDirection = Vector3.TransformCoordinates(
-              moveDirection.normalize(),
-              Matrix.RotationY(camera.rotation.y),
-            );
-
-            const currentVelocity =
-              avatar.physicsImpostor.getLinearVelocity() || Vector3.Zero();
-            const targetVelocity = moveDirection.scale(5); // Adjust speed as needed
-            const smoothedVelocity = new Vector3(
-              lerp(currentVelocity.x, targetVelocity.x, 0.1),
-              currentVelocity.y,
-              lerp(currentVelocity.z, targetVelocity.z, 0.1),
-            );
-
-            avatar.physicsImpostor.setLinearVelocity(smoothedVelocity);
-
-            // Rotate avatar to face movement direction smoothly
-            if (!moveDirection.equals(Vector3.Zero())) {
-              const targetDirection = Vector3.Normalize(moveDirection);
-              const targetQuaternion = Quaternion.FromLookDirectionLH(
-                targetDirection,
-                Vector3.Up(),
-              );
-              targetRotation = Quaternion.Slerp(
-                targetRotation,
-                targetQuaternion,
-                0.1,
-              );
-              avatar.rotationQuaternion = targetRotation;
-            }
-
-            if (inputMap[" "] && avatar.position.y <= 1.1) {
-              avatar.physicsImpostor.applyImpulse(
-                new Vector3(0, 2, 0),
-                avatar.getAbsolutePosition(),
-              );
-            }
-
-            // Raycasting to keep the avatar on the ground
-            const ray = new Ray(avatar.position, new Vector3(0, -1, 0), 10);
-            const pickInfo = scene.pickWithRay(ray);
-
-            if (pickInfo?.hit && pickInfo.pickedPoint) {
-              avatar.position.y = pickInfo.pickedPoint.y + 1; // Adjust the avatar's position to be on the ground
-            }
-          }
-        });
-
-        // Create a GUI layer
-        const guiTexture = AdvancedDynamicTexture.CreateFullscreenUI("UI");
-
-        // Add instruction text
-        const instructionText = new TextBlock();
-        instructionText.text =
-          "Use WASD or arrow keys to move\nUse mouse to look around";
-        instructionText.color = "white";
-        instructionText.fontSize = 20;
-        instructionText.top = "20px";
-        guiTexture.addControl(instructionText);
-
-        const hideInstruction = () => {
-          instructionText.isVisible = false;
-          window.removeEventListener("keydown", hideInstruction);
-          window.removeEventListener("mousemove", hideInstruction);
-        };
-
-        window.addEventListener("keydown", hideInstruction);
-        window.addEventListener("mousemove", hideInstruction);
-
-        // Prevent scrolling when spacebar is pressed
-        const handleKeyDown = (event: KeyboardEvent) => {
-          if (event.code === "Space") {
-            event.preventDefault();
-          }
-        };
-
-        // Add event listener to the canvas
-        if (canvasRef.current) {
-          canvasRef.current.addEventListener("keydown", handleKeyDown);
-        }
-
-        engine.runRenderLoop(() => {
-          scene.render();
-        });
-        window.addEventListener("resize", () => {
-          engine.resize();
-        });
-
-        return (): void => {
-          engine.dispose();
-          // Remove event listener when component unmounts
-          canvasRef.current?.removeEventListener("keydown", handleKeyDown);
-        };
+      // Update camera position in the render loop
+      scene.onBeforeRenderObservable.add(() => {
+        camera.position = avatar.position.add(new Vector3(0, 5, -10));
       });
+
+      // Movement controls setup
+      let inputMap: { [key: string]: boolean } = {};
+      scene.actionManager = new ActionManager(scene);
+      scene.actionManager.registerAction(
+        new ExecuteCodeAction(ActionManager.OnKeyDownTrigger, (evt) => {
+          inputMap[evt.sourceEvent.key] = evt.sourceEvent.type === "keydown";
+        }),
+      );
+      scene.actionManager.registerAction(
+        new ExecuteCodeAction(ActionManager.OnKeyUpTrigger, (evt) => {
+          inputMap[evt.sourceEvent.key] = evt.sourceEvent.type === "keydown";
+        }),
+      );
+
+      // Update loop for smoother movement
+      let moveDirection = Vector3.Zero();
+      scene.onBeforeRenderObservable.add(() => {
+        if (avatar.physicsImpostor) {
+          moveDirection = Vector3.Zero();
+          if (inputMap["w"] || inputMap["ArrowUp"]) moveDirection.z += 1;
+          if (inputMap["s"] || inputMap["ArrowDown"]) moveDirection.z -= 1;
+          if (inputMap["a"] || inputMap["ArrowLeft"]) moveDirection.x -= 1;
+          if (inputMap["d"] || inputMap["ArrowRight"]) moveDirection.x += 1;
+
+          moveDirection = Vector3.TransformCoordinates(
+            moveDirection.normalize(),
+            Matrix.RotationY(camera.rotation.y),
+          );
+
+          const currentVelocity =
+            avatar.physicsImpostor.getLinearVelocity() || Vector3.Zero();
+          const targetVelocity = moveDirection.scale(5); // Adjust speed as needed
+          const smoothedVelocity = new Vector3(
+            lerp(currentVelocity.x, targetVelocity.x, 0.1),
+            currentVelocity.y,
+            lerp(currentVelocity.z, targetVelocity.z, 0.1),
+          );
+
+          avatar.physicsImpostor.setLinearVelocity(smoothedVelocity);
+
+          if (inputMap[" "] && avatar.position.y <= 1.1) {
+            avatar.physicsImpostor.applyImpulse(
+              new Vector3(0, 2, 0),
+              avatar.getAbsolutePosition(),
+            );
+          }
+        }
+      });
+
+      // Create a GUI layer
+      const guiTexture = AdvancedDynamicTexture.CreateFullscreenUI("UI");
+
+      // Add instruction text
+      const instructionText = new TextBlock();
+      instructionText.text =
+        "Use WASD or arrow keys to move\nUse mouse to look around";
+      instructionText.color = "white";
+      instructionText.fontSize = 20;
+      instructionText.top = "20px";
+      guiTexture.addControl(instructionText);
+
+      const hideInstruction = () => {
+        instructionText.isVisible = false;
+        window.removeEventListener("keydown", hideInstruction);
+        window.removeEventListener("mousemove", hideInstruction);
+      };
+
+      window.addEventListener("keydown", hideInstruction);
+      window.addEventListener("mousemove", hideInstruction);
+
+      // Prevent scrolling when spacebar is pressed
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.code === "Space") {
+          event.preventDefault();
+        }
+      };
+
+      // Add event listener to the canvas
+      if (canvasRef.current)
+        canvasRef.current.addEventListener("keydown", handleKeyDown);
+
+      engine.runRenderLoop(() => {
+        scene.render();
+      });
+      window.addEventListener("resize", () => {
+        engine.resize();
+      });
+
+      return (): void => {
+        engine.dispose();
+        // Remove event listener when component unmounts
+        canvasRef.current?.removeEventListener("keydown", handleKeyDown);
+      };
     });
   }, []);
 
@@ -537,53 +507,6 @@ const AvatarSceneContent: React.FC = () => {
 // Add this helper function outside of your component
 function lerp(start: number, end: number, amt: number): number {
   return (1 - amt) * start + amt * end;
-}
-
-function createShader(
-  gl: WebGLRenderingContext,
-  type: number,
-  source: string,
-): WebGLShader | null {
-  const shader = gl.createShader(type);
-  if (!shader) return null;
-
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    console.error(
-      "An error occurred compiling the shaders:",
-      gl.getShaderInfoLog(shader),
-    );
-    gl.deleteShader(shader);
-    return null;
-  }
-
-  return shader;
-}
-
-function createProgram(
-  gl: WebGLRenderingContext,
-  vertexShader: WebGLShader,
-  fragmentShader: WebGLShader,
-): WebGLProgram | null {
-  const program = gl.createProgram();
-  if (!program) return null;
-
-  gl.attachShader(program, vertexShader);
-  gl.attachShader(program, fragmentShader);
-  gl.linkProgram(program);
-
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    console.error(
-      "Unable to initialize the shader program:",
-      gl.getProgramInfoLog(program),
-    );
-    gl.deleteProgram(program);
-    return null;
-  }
-
-  return program;
 }
 
 export default AvatarSceneContent;
