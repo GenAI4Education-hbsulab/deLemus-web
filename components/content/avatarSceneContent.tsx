@@ -142,7 +142,7 @@ const AvatarSceneContent: React.FC = () => {
       (gltf: any) => {
         avatar = gltf.userData.vrm;
         if (avatar) {
-          avatar.scene.scale.set(1.5, 1.5, 1.5); // Scale the avatar
+          avatar.scene.scale.set(2, 2, 2); // Scale the avatar
           avatar.scene.rotation.y = Math.PI; // Rotate the avatar by 180 degrees
           scene.add(avatar.scene);
 
