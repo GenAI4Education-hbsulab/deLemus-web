@@ -19,6 +19,8 @@ import {
   Color3,
   AmmoJSPlugin,
   Matrix,
+  DynamicTexture,
+  Ray,
 } from "@babylonjs/core";
 import "@babylonjs/loaders";
 import ReactMarkdown from "react-markdown";
@@ -78,7 +80,12 @@ const AvatarSceneContent: React.FC = () => {
 
       // Lighting
       new HemisphericLight("light", new Vector3(0, 1, 0), scene);
-      new PointLight("pointLight", new Vector3(0, 5, -5), scene);
+      const pointlight = new PointLight(
+        "pointLight",
+        new Vector3(0, 5, -5),
+        scene,
+      );
+      pointlight.intensity = 0.5; // Dim the point light
 
       // Create ground
       const ground = MeshBuilder.CreateGround(
@@ -105,7 +112,7 @@ const AvatarSceneContent: React.FC = () => {
       SceneLoader.ImportMeshAsync("", "/", "classroom.glb", scene).then(
         (result) => {
           const classroomRoot = result.meshes[0];
-          classroomRoot.scaling = new Vector3(2, 2, 2); // Increased scaling
+          classroomRoot.scaling = new Vector3(3, 3, 3); // Increased scaling
           classroomRoot.position.y = 0;
 
           // Apply physics to the root mesh
@@ -115,13 +122,81 @@ const AvatarSceneContent: React.FC = () => {
             { mass: 0, restitution: 0.9 },
             scene,
           );
+
+          // Find the blackboard mesh
+          const blackboard = classroomRoot
+            .getChildMeshes()
+            .find((mesh) => mesh.name === "blackboard.001_posters_0");
+          if (blackboard) {
+            // Create a dynamic texture
+            const dynamicTexture = new DynamicTexture(
+              "dynamicTexture",
+              { width: 1024, height: 512 },
+              scene,
+              false,
+            );
+            const textureContext = dynamicTexture.getContext();
+
+            // Clear the texture
+            textureContext.clearRect(
+              0,
+              0,
+              dynamicTexture.getSize().width,
+              dynamicTexture.getSize().height,
+            );
+
+            // Rotate the context
+            textureContext.save();
+            textureContext.translate(
+              dynamicTexture.getSize().width / 2,
+              dynamicTexture.getSize().height / 2,
+            );
+            textureContext.rotate(-Math.PI / 2);
+            textureContext.translate(
+              -dynamicTexture.getSize().height / 2,
+              -dynamicTexture.getSize().width / 2,
+            );
+
+            // Draw the URL onto the texture
+            const url = "http://localhost:3000/student/content/molecule";
+            textureContext.font = "bold 36px Arial"; // Increase font size
+            textureContext.fillStyle = "white";
+            const textWidth = textureContext.measureText(url).width;
+            textureContext.fillText(
+              url,
+              0,
+              dynamicTexture.getSize().height / 2,
+            ); // Adjust position to start from the beginning
+            // Restore the context
+            textureContext.restore();
+
+            // Update the dynamic texture
+            dynamicTexture.update();
+
+            // Apply the dynamic texture to the blackboard
+            const blackboardMaterial = new StandardMaterial(
+              "blackboardMaterial",
+              scene,
+            );
+            blackboardMaterial.diffuseColor = new Color3(1, 1, 1); // Set color to red
+            blackboardMaterial.diffuseTexture = dynamicTexture;
+            blackboard.material = blackboardMaterial;
+
+            // Add action manager to the blackboard
+            blackboard.actionManager = new ActionManager(scene);
+            blackboard.actionManager.registerAction(
+              new ExecuteCodeAction(ActionManager.OnPickTrigger, () => {
+                window.location.href = url; // Navigate to the URL
+              }),
+            );
+          }
         },
       );
 
       // Avatar setup
       let avatar = MeshBuilder.CreateBox(
         "avatar",
-        { height: 2, width: 1, depth: 1 },
+        { height: 1, width: 1, depth: 1 },
         scene,
       );
       avatar.position = new Vector3(0, 5, 0);
@@ -188,7 +263,7 @@ const AvatarSceneContent: React.FC = () => {
 
           if (inputMap[" "] && avatar.position.y <= 1.1) {
             avatar.physicsImpostor.applyImpulse(
-              new Vector3(0, 2, 0),
+              new Vector3(0, 1, 0),
               avatar.getAbsolutePosition(),
             );
           }
