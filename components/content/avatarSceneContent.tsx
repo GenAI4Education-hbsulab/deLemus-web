@@ -3,31 +3,15 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { AssistantStream } from "openai/lib/AssistantStream";
-import {
-  Engine,
-  Scene,
-  UniversalCamera,
-  Vector3,
-  HemisphericLight,
-  SceneLoader,
-  PointLight,
-  MeshBuilder,
-  ActionManager,
-  ExecuteCodeAction,
-  PhysicsImpostor,
-  StandardMaterial,
-  Color3,
-  AmmoJSPlugin,
-  Matrix,
-} from "@babylonjs/core";
-import "@babylonjs/loaders";
+import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
+import { Body, Box, Plane, Vec3, World, ConvexPolyhedron } from "cannon-es";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { atomDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
 import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
-import { AdvancedDynamicTexture, TextBlock } from "@babylonjs/gui";
-import Ammo from "ammojs-typed";
+import { VRMLoaderPlugin, VRM } from "@pixiv/three-vrm";
 
 interface MessageType {
   role: "user" | "assistant";
@@ -69,177 +53,199 @@ const AvatarSceneContent: React.FC = () => {
   useEffect(() => {
     if (canvasRef.current === null) return;
 
-    const engine = new Engine(canvasRef.current, true);
-    const scene = new Scene(engine);
+    // Three.js setup
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000,
+    );
+    const renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current });
+    renderer.setSize(window.innerWidth, window.innerHeight);
 
-    Ammo().then((AmmoLib) => {
-      const ammoPlugin = new AmmoJSPlugin(true, AmmoLib);
-      scene.enablePhysics(new Vector3(0, -9.81, 0), ammoPlugin);
+    // Physics setup
+    const world = new World();
+    world.gravity.set(0, -9.81, 0);
 
-      // Lighting
-      new HemisphericLight("light", new Vector3(0, 1, 0), scene);
-      new PointLight("pointLight", new Vector3(0, 5, -5), scene);
+    // Lighting
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444);
+    hemiLight.position.set(0, 20, 0);
+    scene.add(hemiLight);
 
-      // Create ground
-      const ground = MeshBuilder.CreateGround(
-        "ground",
-        { width: 100, height: 100 },
-        scene,
-      );
-      ground.position.y = 0;
+    const dirLight = new THREE.DirectionalLight(0xffffff);
+    dirLight.position.set(0, 20, -10);
+    scene.add(dirLight);
 
-      // Apply material to ground (optional)
-      const groundMaterial = new StandardMaterial("groundMaterial", scene);
-      groundMaterial.diffuseColor = new Color3(0.5, 0.5, 0.5);
-      ground.material = groundMaterial;
+    // Ground
+    const groundGeometry = new THREE.PlaneGeometry(100, 100);
+    const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x808080 });
+    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
 
-      // Apply physics to ground
-      ground.physicsImpostor = new PhysicsImpostor(
-        ground,
-        PhysicsImpostor.BoxImpostor,
-        { mass: 0, restitution: 0.9 },
-        scene,
-      );
+    // Ground physics
+    const groundBody = new Body({
+      mass: 0,
+      shape: new Plane(),
+    });
+    groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+    world.addBody(groundBody);
 
-      // Load environment
-      SceneLoader.ImportMeshAsync("", "/", "classroom.glb", scene).then(
-        (result) => {
-          const classroomRoot = result.meshes[0];
-          classroomRoot.scaling = new Vector3(2, 2, 2); // Increased scaling
-          classroomRoot.position.y = 0;
+    // Load environment
+    const loader = new GLTFLoader();
+    loader.load("/classroom.glb", (gltf: any) => {
+      const classroom = gltf.scene;
+      classroom.scale.set(2, 2, 2);
+      scene.add(classroom);
 
-          // Apply physics to the root mesh
-          classroomRoot.physicsImpostor = new PhysicsImpostor(
-            classroomRoot,
-            PhysicsImpostor.MeshImpostor,
-            { mass: 0, restitution: 0.9 },
-            scene,
-          );
-        },
-      );
-
-      // Avatar setup
-      let avatar = MeshBuilder.CreateBox(
-        "avatar",
-        { height: 2, width: 1, depth: 1 },
-        scene,
-      );
-      avatar.position = new Vector3(0, 5, 0);
-      avatar.physicsImpostor = new PhysicsImpostor(
-        avatar,
-        PhysicsImpostor.BoxImpostor,
-        { mass: 1, friction: 0.5, restitution: 0.3 },
-        scene,
-      );
-
-      // Camera setup
-      const camera = new UniversalCamera(
-        "camera",
-        new Vector3(0, 5, -10),
-        scene,
-      );
-      camera.setTarget(avatar.position);
-      camera.attachControl(canvasRef.current, true);
-
-      // Update camera position in the render loop
-      scene.onBeforeRenderObservable.add(() => {
-        camera.position = avatar.position.add(new Vector3(0, 5, -10));
+      // Create physics bodies for classroom meshes
+      classroom.traverse((child: any) => {
+        if (child.isMesh) {
+          const vertices = child.geometry.attributes.position.array;
+          const indices = child.geometry.index.array;
+          const shape = new ConvexPolyhedron({
+            vertices: vertices.map(
+              (v: number, i: number) =>
+                new Vec3(
+                  vertices[i * 3],
+                  vertices[i * 3 + 1],
+                  vertices[i * 3 + 2],
+                ),
+            ),
+            faces: indices.map((i: number, j: number) =>
+              indices.slice(j * 3, j * 3 + 3),
+            ),
+          });
+          const body = new Body({
+            mass: 0,
+            position: new Vec3(
+              child.position.x,
+              child.position.y,
+              child.position.z,
+            ),
+            shape: shape,
+          });
+          world.addBody(body);
+        }
       });
+    });
 
-      // Movement controls setup
-      let inputMap: { [key: string]: boolean } = {};
-      scene.actionManager = new ActionManager(scene);
-      scene.actionManager.registerAction(
-        new ExecuteCodeAction(ActionManager.OnKeyDownTrigger, (evt) => {
-          inputMap[evt.sourceEvent.key] = evt.sourceEvent.type === "keydown";
-        }),
-      );
-      scene.actionManager.registerAction(
-        new ExecuteCodeAction(ActionManager.OnKeyUpTrigger, (evt) => {
-          inputMap[evt.sourceEvent.key] = evt.sourceEvent.type === "keydown";
-        }),
-      );
+    // Avatar setup
+    let avatar: VRM | null = null;
+    let mixer: THREE.AnimationMixer | null = null;
+    const ava_loader = new GLTFLoader();
+    ava_loader.register((parser: any) => new VRMLoaderPlugin(parser));
+    ava_loader.load(
+      "/avatar.vrm",
+      (gltf: any) => {
+        avatar = gltf.userData.vrm;
+        if (avatar) {
+          avatar.scene.scale.set(1.5, 1.5, 1.5); // Scale the avatar
+          avatar.scene.rotation.y = Math.PI; // Rotate the avatar by 180 degrees
+          scene.add(avatar.scene);
 
-      // Update loop for smoother movement
-      let moveDirection = Vector3.Zero();
-      scene.onBeforeRenderObservable.add(() => {
-        if (avatar.physicsImpostor) {
-          moveDirection = Vector3.Zero();
-          if (inputMap["w"] || inputMap["ArrowUp"]) moveDirection.z += 1;
-          if (inputMap["s"] || inputMap["ArrowDown"]) moveDirection.z -= 1;
-          if (inputMap["a"] || inputMap["ArrowLeft"]) moveDirection.x -= 1;
-          if (inputMap["d"] || inputMap["ArrowRight"]) moveDirection.x += 1;
+          // Set up animation mixer
+          mixer = new THREE.AnimationMixer(avatar.scene);
 
-          moveDirection = Vector3.TransformCoordinates(
-            moveDirection.normalize(),
-            Matrix.RotationY(camera.rotation.y),
+          console.log("anime", gltf.animations);
+          const walkClip = gltf.animations.find(
+            (clip: any) => clip.name === "walk",
+          );
+          const jumpClip = gltf.animations.find(
+            (clip: any) => clip.name === "jump",
           );
 
-          const currentVelocity =
-            avatar.physicsImpostor.getLinearVelocity() || Vector3.Zero();
-          const targetVelocity = moveDirection.scale(5); // Adjust speed as needed
-          const smoothedVelocity = new Vector3(
-            lerp(currentVelocity.x, targetVelocity.x, 0.1),
-            currentVelocity.y,
-            lerp(currentVelocity.z, targetVelocity.z, 0.1),
-          );
+          if (walkClip) {
+            const walkAction = mixer.clipAction(walkClip);
+            walkAction.play();
+          }
 
-          avatar.physicsImpostor.setLinearVelocity(smoothedVelocity);
-
-          if (inputMap[" "] && avatar.position.y <= 1.1) {
-            avatar.physicsImpostor.applyImpulse(
-              new Vector3(0, 2, 0),
-              avatar.getAbsolutePosition(),
-            );
+          if (jumpClip) {
+            const jumpAction = mixer.clipAction(jumpClip);
           }
         }
-      });
+      },
+      (progress: any) =>
+        console.log(
+          "Loading model...",
+          100.0 * (progress.loaded / progress.total),
+          "%",
+        ),
+      (error: any) => console.error(error),
+    );
 
-      // Create a GUI layer
-      const guiTexture = AdvancedDynamicTexture.CreateFullscreenUI("UI");
+    // Camera setup
+    const cameraOffset = new THREE.Vector3(0, 5, -10);
 
-      // Add instruction text
-      const instructionText = new TextBlock();
-      instructionText.text =
-        "Use WASD or arrow keys to move\nUse mouse to look around";
-      instructionText.color = "white";
-      instructionText.fontSize = 20;
-      instructionText.top = "20px";
-      guiTexture.addControl(instructionText);
+    // Movement controls setup
+    const moveDirection = new THREE.Vector3();
+    const velocity = new THREE.Vector3();
+    const inputMap: { [key: string]: boolean } = {};
 
-      const hideInstruction = () => {
-        instructionText.isVisible = false;
-        window.removeEventListener("keydown", hideInstruction);
-        window.removeEventListener("mousemove", hideInstruction);
-      };
-
-      window.addEventListener("keydown", hideInstruction);
-      window.addEventListener("mousemove", hideInstruction);
-
-      // Prevent scrolling when spacebar is pressed
-      const handleKeyDown = (event: KeyboardEvent) => {
-        if (event.code === "Space") {
-          event.preventDefault();
-        }
-      };
-
-      // Add event listener to the canvas
-      if (canvasRef.current)
-        canvasRef.current.addEventListener("keydown", handleKeyDown);
-
-      engine.runRenderLoop(() => {
-        scene.render();
-      });
-      window.addEventListener("resize", () => {
-        engine.resize();
-      });
-
-      return (): void => {
-        engine.dispose();
-        // Remove event listener when component unmounts
-        canvasRef.current?.removeEventListener("keydown", handleKeyDown);
-      };
+    window.addEventListener("keydown", (event) => {
+      inputMap[event.key] = true;
     });
+
+    window.addEventListener("keyup", (event) => {
+      inputMap[event.key] = false;
+    });
+
+    // Animation loop
+    const clock = new THREE.Clock();
+    const animate = () => {
+      requestAnimationFrame(animate);
+
+      // Update physics
+      world.step(1 / 60);
+
+      // Update avatar position
+      if (avatar) {
+        avatar.update(0.016); // Update the VRM model
+      }
+
+      // Update animations
+      if (mixer) {
+        mixer.update(clock.getDelta());
+      }
+
+      // Movement logic
+      moveDirection.set(0, 0, 0);
+
+      if (inputMap["w"] || inputMap["ArrowUp"]) moveDirection.z -= 1;
+      if (inputMap["s"] || inputMap["ArrowDown"]) moveDirection.z += 1;
+      if (inputMap["a"] || inputMap["ArrowLeft"]) moveDirection.x -= 1;
+      if (inputMap["d"] || inputMap["ArrowRight"]) moveDirection.x += 1;
+
+      if (moveDirection.length() > 0) {
+        moveDirection.normalize();
+        velocity.copy(moveDirection).multiplyScalar(0.1);
+        avatar?.scene.position.add(velocity);
+      }
+
+      // Update camera position to follow the avatar
+      const cameraPosition =
+        avatar?.scene.position.clone().add(cameraOffset) || cameraOffset;
+      camera.position.lerp(cameraPosition, 0.1); // Smooth transition
+      camera.lookAt(avatar?.scene.position || new THREE.Vector3(0, 0, 0));
+
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    // Handle window resize
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    return () => {
+      // Cleanup
+      renderer.dispose();
+      window.removeEventListener("resize", () => {});
+    };
   }, []);
 
   const sendMessage = async (text: string, retryCount = 0): Promise<void> => {
@@ -283,67 +289,31 @@ const AvatarSceneContent: React.FC = () => {
       stream.on("textDelta", (delta: { value?: string }): void => {
         if (delta.value != null) {
           assistantResponse += delta.value;
-          setTokenCount(
-            (prevCount) => prevCount + estimateTokens(delta.value!),
-          );
-          setMessages((prev) => {
-            const newMessages = [...prev];
-            newMessages[newMessages.length - 1].content = assistantResponse;
-            return newMessages;
-          });
+          setTokenCount((prev) => prev + (delta.value?.length ?? 0));
         }
       });
 
-      stream.on("event", (event: { event: string }): void => {
-        if (event.event === "thread.run.completed") {
-          clearTimeout(timeout);
-          setInputDisabled(false);
-          resolve();
-        }
-      });
-
-      stream.on("error", (error: Error) => {
+      stream.on("end", (): void => {
         clearTimeout(timeout);
+        setMessages((prev) => {
+          const lastMessage = prev[prev.length - 1];
+          if (lastMessage.role === "assistant") {
+            lastMessage.content = assistantResponse;
+          }
+          return [...prev];
+        });
+        setInputDisabled(false);
+        resolve();
+      });
+
+      stream.on("error", (error: Error): void => {
+        clearTimeout(timeout);
+        console.error("Stream error:", error);
+        setInputDisabled(false);
         reject(error);
       });
     });
   };
-
-  const estimateTokens = (text: string): number => {
-    // This is a very rough estimate. For more accurate results,
-    // you might want to use a tokenizer library specific to your model.
-    return Math.ceil(text.split(/\s+/).length * 1.3);
-  };
-
-  const handleUserInput = useCallback(async (): Promise<void> => {
-    if (userInput.trim() !== "") {
-      setMessages((prev) => [...prev, { role: "user", content: userInput }]);
-      setUserInput("");
-      setInputDisabled(true);
-      await sendMessage(userInput);
-    }
-  }, [userInput, sendMessage]);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === "Enter" && inputDisabled !== null && !inputDisabled) {
-        void handleUserInput();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [handleUserInput, inputDisabled]);
-
-  useEffect(() => {
-    if (chatContainerRef.current !== null) {
-      chatContainerRef.current.scrollTop =
-        chatContainerRef.current.scrollHeight;
-    }
-  }, [messages]);
 
   const renderMessage = (msg: MessageType, id: number): JSX.Element => (
     <div
@@ -490,7 +460,7 @@ const AvatarSceneContent: React.FC = () => {
             />
             <button
               onClick={() => {
-                void handleUserInput();
+                // void handleUserInput();
               }}
               disabled={inputDisabled || tokenCount >= MAX_TOKENS}
               className="px-4 py-2 bg-green-500 text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
@@ -503,10 +473,5 @@ const AvatarSceneContent: React.FC = () => {
     </div>
   );
 };
-
-// Add this helper function outside of your component
-function lerp(start: number, end: number, amt: number): number {
-  return (1 - amt) * start + amt * end;
-}
 
 export default AvatarSceneContent;
