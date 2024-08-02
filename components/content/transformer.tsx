@@ -75,7 +75,7 @@ const TransformerEmbed: React.FC = () => {
             scene,
           );
           modelMesh = result.meshes[0] as Mesh;
-          modelMesh.position.y = 20; // Position the model above the ground
+          modelMesh.position.y = 2; // Position the model above the ground
 
           // Highlight layer
           const highlightLayer = new HighlightLayer("hl1", scene);
