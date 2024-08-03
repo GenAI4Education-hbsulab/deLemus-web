@@ -12,7 +12,11 @@ import {
   Color3,
   StandardMaterial,
   Color4,
+  WebXRState,
   HighlightLayer,
+  PBRMaterial,
+  ISceneLoaderProgressEvent,
+  AbstractMesh,
 } from "@babylonjs/core";
 import "@babylonjs/loaders";
 import "@babylonjs/gui";
@@ -24,6 +28,8 @@ const TransformerEmbed: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
+    const preventDefault = (e: Event) => e.preventDefault();
+
     const initializeBabylon = async () => {
       if (canvasRef.current) {
         const engine = new Engine(canvasRef.current, true);
@@ -51,14 +57,6 @@ const TransformerEmbed: React.FC = () => {
         );
         hemisphericLight.intensity = 0.6;
 
-        // Create a point light
-        const pointLight = new PointLight(
-          "pointLight",
-          new Vector3(0, 50, -50),
-          scene,
-        );
-        pointLight.intensity = 0.6;
-
         // Create ground with a white material
         const ground = Mesh.CreateGround("ground", 500, 500, 10, scene);
         const groundMaterial = new StandardMaterial("groundMat", scene);
@@ -73,58 +71,43 @@ const TransformerEmbed: React.FC = () => {
             "/",
             "transformer.glb",
             scene,
+            (event: ISceneLoaderProgressEvent) => {
+              // Handle progress event if needed
+            },
           );
-          modelMesh = result.meshes[0] as Mesh;
-          modelMesh.position.y = 2; // Position the model above the ground
 
-          // Highlight layer
-          const highlightLayer = new HighlightLayer("hl1", scene);
+          const { meshes, particleSystems, skeletons, animationGroups } =
+            result;
+          if (meshes.length > 0) {
+            meshes.forEach((mesh: AbstractMesh) => {
+              if (!mesh.material) {
+                mesh.position.y += 2;
+                const newMaterial = new PBRMaterial(
+                  `material_${mesh.name}`,
+                  scene,
+                );
+                newMaterial.albedoColor = new Color3(0.5, 0.5, 0.5);
+                newMaterial.metallic = 0.1;
+                newMaterial.roughness = 0.8;
+                mesh.material = newMaterial;
+              } else {
+                console.log(
+                  `Mesh ${mesh.name} has material: ${mesh.material.name}`,
+                );
+              }
+            });
+          }
 
-          const xrHelper = await scene.createDefaultXRExperienceAsync({
-            floorMeshes: [ground],
-          });
-
-          let mesh: Mesh | null = null;
-
-          xrHelper.input.onControllerAddedObservable.add((controller) => {
-            controller.onMotionControllerInitObservable.add(
-              (motionController) => {
-                if (
-                  motionController.handness === "left" ||
-                  motionController.handness === "right"
-                ) {
-                  const xr_ids = motionController.getComponentIds();
-                  let triggerComponent = motionController.getComponent(
-                    xr_ids[0],
-                  );
-                  triggerComponent.onButtonStateChangedObservable.add(() => {
-                    if (triggerComponent.changes.pressed) {
-                      if (triggerComponent.pressed) {
-                        if (xrHelper.pointerSelection.getMeshUnderPointer) {
-                          mesh = xrHelper.pointerSelection.getMeshUnderPointer(
-                            controller.uniqueId,
-                          ) as Mesh;
-                        } else {
-                          mesh = scene.meshUnderPointer as Mesh;
-                        }
-                        if (mesh && mesh !== ground) {
-                          mesh.setParent(motionController.rootMesh);
-                          // Highlight the model when picked up
-                          highlightLayer.addMesh(mesh, Color3.Yellow());
-                        }
-                      } else if (mesh) {
-                        mesh.setParent(null);
-                        // Remove highlight when released
-                        highlightLayer.removeMesh(mesh);
-                      }
-                    }
-                  });
-                }
-              },
+          // Ensure proper lighting
+          if (!scene.lights.length) {
+            const light = new HemisphericLight(
+              "light",
+              new Vector3(0, 1, 0),
+              scene,
             );
-          });
+            light.intensity = 1;
+          }
         };
-
         createScene();
 
         engine.runRenderLoop(() => {
@@ -137,11 +120,28 @@ const TransformerEmbed: React.FC = () => {
 
         return () => {
           engine.dispose();
+          // Remove event listeners
+          canvasRef.current?.removeEventListener("wheel", preventDefault);
+          canvasRef.current?.removeEventListener("touchmove", preventDefault);
+          document.body.style.overflow = "";
         };
       }
     };
 
     initializeBabylon();
+
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.addEventListener("wheel", preventDefault, { passive: false });
+      canvas.addEventListener("touchmove", preventDefault, { passive: false });
+    }
+
+    return () => {
+      if (canvas) {
+        canvas.removeEventListener("wheel", preventDefault);
+        canvas.removeEventListener("touchmove", preventDefault);
+      }
+    };
   }, []);
 
   return <canvas ref={canvasRef} style={{ width: "100%", height: "100%" }} />;

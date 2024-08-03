@@ -21,6 +21,7 @@ import {
   Matrix,
   DynamicTexture,
   Ray,
+  WebXRState,
 } from "@babylonjs/core";
 import "@babylonjs/loaders";
 import ReactMarkdown from "react-markdown";
@@ -190,6 +191,46 @@ const AvatarSceneContent: React.FC = () => {
               }),
             );
           }
+
+          // WebXR setup
+          scene
+            .createDefaultXRExperienceAsync({
+              floorMeshes: [ground],
+            })
+            .then((xrHelper) => {
+              if (xrHelper.baseExperience) {
+                // Make sure xrHelper and its properties are defined
+                xrHelper.baseExperience.onStateChangedObservable.add(
+                  (state) => {
+                    if (state === WebXRState.IN_XR) {
+                      if (
+                        xrHelper.input &&
+                        xrHelper.input.onControllerAddedObservable
+                      ) {
+                        console.log(xrHelper.input.onControllerAddedObservable);
+                        xrHelper.input.onControllerAddedObservable.add(
+                          (controller) => {
+                            // Handle controller added
+                            console.log("XR controller added:", controller);
+                          },
+                        );
+                      } else {
+                        console.warn(
+                          "XR input or onControllerAddedObservable not available",
+                        );
+                      }
+                    }
+                  },
+                );
+              } else {
+                console.warn(
+                  "WebXR not supported in this browser or environment",
+                );
+              }
+            })
+            .catch((error) => {
+              console.error("Error setting up WebXR:", error);
+            });
         },
       );
 
