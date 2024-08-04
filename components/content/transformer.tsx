@@ -17,12 +17,14 @@ import {
   PBRMaterial,
   ISceneLoaderProgressEvent,
   AbstractMesh,
+  WebXRDefaultExperience,
 } from "@babylonjs/core";
 import "@babylonjs/loaders";
 import "@babylonjs/gui";
 import "@babylonjs/materials";
 import "@babylonjs/serializers";
 import "@babylonjs/inspector"; // Optional, for debugging
+import { AdvancedDynamicTexture, Button } from "@babylonjs/gui";
 
 const TransformerEmbed: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -81,7 +83,7 @@ const TransformerEmbed: React.FC = () => {
           if (meshes.length > 0) {
             meshes.forEach((mesh: AbstractMesh) => {
               if (!mesh.material) {
-                mesh.position.y += 2;
+                mesh.position.y += 5; // Raise the mesh by 5 units
                 const newMaterial = new PBRMaterial(
                   `material_${mesh.name}`,
                   scene,
@@ -106,6 +108,50 @@ const TransformerEmbed: React.FC = () => {
               scene,
             );
             light.intensity = 1;
+          }
+
+          // Setup WebXR
+          try {
+            const xrHelper = await WebXRDefaultExperience.CreateAsync(scene, {
+              disableDefaultUI: true,
+              floorMeshes: [ground],
+            });
+
+            // Create Enter VR button
+            const advancedTexture =
+              AdvancedDynamicTexture.CreateFullscreenUI("UI");
+            const enterVRButton = Button.CreateSimpleButton(
+              "enterVRButton",
+              "Enter VR",
+            );
+            enterVRButton.width = "150px";
+            enterVRButton.height = "40px";
+            enterVRButton.color = "white";
+            enterVRButton.cornerRadius = 20;
+            enterVRButton.background = "green";
+            enterVRButton.onPointerUpObservable.add(() => {
+              xrHelper.baseExperience.enterXRAsync(
+                "immersive-vr",
+                "local-floor",
+              );
+            });
+            advancedTexture.addControl(enterVRButton);
+
+            // Position the button
+            enterVRButton.horizontalAlignment =
+              Button.HORIZONTAL_ALIGNMENT_RIGHT;
+            enterVRButton.verticalAlignment = Button.VERTICAL_ALIGNMENT_BOTTOM;
+            enterVRButton.left = "-20px";
+            enterVRButton.top = "-20px";
+
+            // Check if WebXR is available
+            if (!xrHelper.baseExperience) {
+              console.log("WebXR not available on this device");
+              enterVRButton.isEnabled = false;
+              enterVRButton.background = "grey";
+            }
+          } catch (error) {
+            console.error("Error initializing WebXR:", error);
           }
         };
         createScene();
