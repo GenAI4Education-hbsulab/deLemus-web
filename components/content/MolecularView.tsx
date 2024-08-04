@@ -13,12 +13,14 @@ import {
   StandardMaterial,
   Color4,
   HighlightLayer,
+  WebXRDefaultExperience,
 } from "@babylonjs/core";
 import "@babylonjs/loaders";
 import "@babylonjs/gui";
 import "@babylonjs/materials";
 import "@babylonjs/serializers";
 import "@babylonjs/inspector"; // Optional, for debugging
+import { AdvancedDynamicTexture, Button } from "@babylonjs/gui";
 
 const MolecularView: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -54,10 +56,12 @@ const MolecularView: React.FC = () => {
           "Camera",
           Math.PI / 2,
           Math.PI / 2.5,
-          50,
-          Vector3.Zero(),
+          100,
+          new Vector3(0, 0, 0),
           scene,
         );
+        camera.setPosition(new Vector3(50, 50, 50));
+        camera.setTarget(Vector3.Zero());
         camera.attachControl(canvasRef.current, true);
 
         // Create a hemispheric light
@@ -94,9 +98,45 @@ const MolecularView: React.FC = () => {
           const highlightLayer = new HighlightLayer("hl1", scene);
 
           try {
-            const xrHelper = await scene.createDefaultXRExperienceAsync({
+            // Hide the default VR button
+            const xrHelper = await WebXRDefaultExperience.CreateAsync(scene, {
+              disableDefaultUI: true,
               floorMeshes: [ground],
             });
+
+            // Create custom Enter VR button
+            const advancedTexture =
+              AdvancedDynamicTexture.CreateFullscreenUI("UI");
+            const enterVRButton = Button.CreateSimpleButton(
+              "enterVRButton",
+              "Enter VR",
+            );
+            enterVRButton.width = "150px";
+            enterVRButton.height = "40px";
+            enterVRButton.color = "white";
+            enterVRButton.cornerRadius = 20;
+            enterVRButton.background = "green";
+            enterVRButton.onPointerUpObservable.add(() => {
+              xrHelper.baseExperience.enterXRAsync(
+                "immersive-vr",
+                "local-floor",
+              );
+            });
+            advancedTexture.addControl(enterVRButton);
+
+            // Position the button
+            enterVRButton.horizontalAlignment =
+              Button.HORIZONTAL_ALIGNMENT_RIGHT;
+            enterVRButton.verticalAlignment = Button.VERTICAL_ALIGNMENT_BOTTOM;
+            enterVRButton.left = "-20px";
+            enterVRButton.top = "-20px";
+
+            // Check if WebXR is available
+            if (!xrHelper.baseExperience) {
+              console.log("WebXR not available on this device");
+              enterVRButton.isEnabled = false;
+              enterVRButton.background = "grey";
+            }
 
             if (xrHelper.baseExperience) {
               let mesh: Mesh | null = null;
@@ -170,7 +210,12 @@ const MolecularView: React.FC = () => {
     initializeBabylon();
   }, []);
 
-  return <canvas ref={canvasRef} style={{ width: "100%", height: "100%" }} />;
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{ width: "100%", height: "100%", display: "block" }}
+    />
+  );
 };
 
 export default MolecularView;
