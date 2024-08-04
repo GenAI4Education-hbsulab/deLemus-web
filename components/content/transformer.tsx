@@ -83,7 +83,7 @@ const TransformerEmbed: React.FC = () => {
           if (meshes.length > 0) {
             meshes.forEach((mesh: AbstractMesh) => {
               if (!mesh.material) {
-                mesh.position.y += 5; // Raise the mesh by 5 units
+                mesh.position.y += 2; // Raise the mesh by 5 units
                 const newMaterial = new PBRMaterial(
                   `material_${mesh.name}`,
                   scene,

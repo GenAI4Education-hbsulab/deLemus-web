@@ -20,8 +20,7 @@ import {
   AmmoJSPlugin,
   Matrix,
   DynamicTexture,
-  Ray,
-  WebXRState,
+  WebXRDefaultExperience,
 } from "@babylonjs/core";
 import "@babylonjs/loaders";
 import ReactMarkdown from "react-markdown";
@@ -29,8 +28,8 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { atomDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
 import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
-import { AdvancedDynamicTexture, TextBlock } from "@babylonjs/gui";
 import Ammo from "ammojs-typed";
+import { AdvancedDynamicTexture, TextBlock, Button } from "@babylonjs/gui";
 
 interface MessageType {
   role: "user" | "assistant";
@@ -123,7 +122,7 @@ const AvatarSceneContent: React.FC = () => {
             { mass: 0, restitution: 0.9 },
             scene,
           );
-
+          classroomRoot.getChildMeshes().map((d) => console.log(d.name));
           // Find the blackboard mesh
           const blackboard = classroomRoot
             .getChildMeshes()
@@ -148,24 +147,17 @@ const AvatarSceneContent: React.FC = () => {
 
             // Rotate the context
             textureContext.save();
-            textureContext.translate(
-              dynamicTexture.getSize().width / 2,
-              dynamicTexture.getSize().height / 2,
-            );
-            textureContext.rotate(-Math.PI / 2);
-            textureContext.translate(
-              -dynamicTexture.getSize().height / 2,
-              -dynamicTexture.getSize().width / 2,
-            );
+            textureContext.scale(1, -1);
+            textureContext.translate(0, -dynamicTexture.getSize().height);
 
             // Draw the URL onto the texture
             const url = "http://localhost:3000/student/content/molecule";
-            textureContext.font = "bold 36px Arial"; // Increase font size
+            textureContext.font = "bold 46px Arial"; // Increase font size
             textureContext.fillStyle = "white";
             const textWidth = textureContext.measureText(url).width;
             textureContext.fillText(
-              url,
-              0,
+              "What is DNA?",
+              50,
               dynamicTexture.getSize().height / 2,
             ); // Adjust position to start from the beginning
             // Restore the context
@@ -192,45 +184,110 @@ const AvatarSceneContent: React.FC = () => {
             );
           }
 
-          // WebXR setup
-          scene
-            .createDefaultXRExperienceAsync({
-              floorMeshes: [ground],
-            })
-            .then((xrHelper) => {
-              if (xrHelper.baseExperience) {
-                // Make sure xrHelper and its properties are defined
-                xrHelper.baseExperience.onStateChangedObservable.add(
-                  (state) => {
-                    if (state === WebXRState.IN_XR) {
-                      if (
-                        xrHelper.input &&
-                        xrHelper.input.onControllerAddedObservable
-                      ) {
-                        console.log(xrHelper.input.onControllerAddedObservable);
-                        xrHelper.input.onControllerAddedObservable.add(
-                          (controller) => {
-                            // Handle controller added
-                            console.log("XR controller added:", controller);
-                          },
-                        );
-                      } else {
-                        console.warn(
-                          "XR input or onControllerAddedObservable not available",
-                        );
-                      }
-                    }
-                  },
-                );
-              } else {
-                console.warn(
-                  "WebXR not supported in this browser or environment",
-                );
+          // Load the avatar model
+          SceneLoader.ImportMeshAsync("", "/", "avatar.glb", scene)
+            .then((avatarResult) => {
+              const avatarRoot = avatarResult.meshes[0];
+
+              // Adjust the avatar's position, scale, and rotation as needed
+              avatarRoot.scaling = new Vector3(2.5, 2.5, 2.5); // Adjust scale if needed
+              avatarRoot.position = new Vector3(-2, 0.2, 20); // Adjust position as needed
+              avatarRoot.rotation = new Vector3(0, Math.PI, 0); // Adjust rotation if needed
+
+              console.log("Avatar loaded successfully");
+
+              // If the avatar has animations, you can set them up here
+              if (avatarResult.animationGroups.length > 0) {
+                avatarResult.animationGroups[0].play(true);
               }
             })
             .catch((error) => {
-              console.error("Error setting up WebXR:", error);
+              console.error("Error loading avatar model:", error);
             });
+
+          // WebXR setup
+          const setupWebXR = async () => {
+            try {
+              const xrHelper = await WebXRDefaultExperience.CreateAsync(scene, {
+                disableDefaultUI: true,
+                floorMeshes: [ground],
+              });
+
+              // Create custom Enter VR button
+              const advancedTexture =
+                AdvancedDynamicTexture.CreateFullscreenUI("UI");
+              const enterVRButton = Button.CreateSimpleButton(
+                "enterVRButton",
+                "Enter VR",
+              );
+              enterVRButton.width = "150px";
+              enterVRButton.height = "40px";
+              enterVRButton.color = "white";
+              enterVRButton.cornerRadius = 20;
+              enterVRButton.background = "green";
+              enterVRButton.onPointerUpObservable.add(() => {
+                xrHelper.baseExperience.enterXRAsync(
+                  "immersive-vr",
+                  "local-floor",
+                );
+              });
+              advancedTexture.addControl(enterVRButton);
+
+              // Position the button
+              enterVRButton.horizontalAlignment =
+                Button.HORIZONTAL_ALIGNMENT_RIGHT;
+              enterVRButton.verticalAlignment =
+                Button.VERTICAL_ALIGNMENT_BOTTOM;
+              enterVRButton.left = "-20px";
+              enterVRButton.top = "-20px";
+
+              // Check if WebXR is available
+              if (!xrHelper.baseExperience) {
+                console.log("WebXR not available on this device");
+                enterVRButton.isEnabled = false;
+                enterVRButton.background = "grey";
+              }
+            } catch (error) {
+              console.error("Error setting up WebXR:", error);
+            }
+          };
+
+          setupWebXR();
+
+          // Find the door_details_0 mesh
+          const doorMesh = classroomRoot
+            .getChildMeshes()
+            .find((mesh) => mesh.name === "door_details_0");
+
+          if (doorMesh) {
+            // Make the door clickable
+            doorMesh.actionManager = new ActionManager(scene);
+            doorMesh.actionManager.registerAction(
+              new ExecuteCodeAction(ActionManager.OnPickTrigger, () => {
+                window.location.href =
+                  "http://localhost:3000/student/content/transformer";
+              }),
+            );
+
+            // Add a small info text above the door
+            const infoPlane = MeshBuilder.CreatePlane(
+              "infoPlane",
+              { width: 1, height: 0.3 },
+              scene,
+            );
+            infoPlane.parent = doorMesh;
+            infoPlane.position.y = 2.5; // Adjust this value to position the text above the door
+            infoPlane.rotation.y = Math.PI;
+
+            const infoTexture = AdvancedDynamicTexture.CreateForMesh(infoPlane);
+            const infoText = new TextBlock();
+            infoText.text = "Transformer";
+            infoText.color = "white";
+            infoText.fontSize = 24;
+            infoTexture.addControl(infoText);
+          } else {
+            console.warn("door_details_0 mesh not found");
+          }
         },
       );
 
