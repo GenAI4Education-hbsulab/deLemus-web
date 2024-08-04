@@ -75,7 +75,7 @@ const sidebarData: {
   items: { text: string; completed: boolean; href: UrlObject }[];
 }[] = [
   {
-    title: "Chapter 1",
+    title: "Basic Knowledge",
     items: [
       {
         text: "General Info",
@@ -100,20 +100,26 @@ const sidebarData: {
     ],
   },
   {
-    title: "Chapter 2",
+    title: "Virtual Classroom",
     items: [
       {
-        text: "Introduction to Asymptotic notation",
+        text: "Classroom",
         completed: false,
         href: {
-          pathname:
-            "/student/content/chapter2/introduction-asymptotic-notation",
+          pathname: "/student/content/immersive",
         },
       },
       {
-        text: "Big-Θ (Big-Theta) notation",
+        text: "Transformer Model",
         completed: false,
-        href: { pathname: "/student/content/chapter2/big-theta-notation" },
+        href: {
+          pathname: "/student/content/transformer",
+        },
+      },
+      {
+        text: "Molecular View",
+        completed: false,
+        href: { pathname: "/student/content/molecule" },
       },
     ],
   },

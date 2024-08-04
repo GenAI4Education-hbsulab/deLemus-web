@@ -20,7 +20,7 @@ import {
   AmmoJSPlugin,
   Matrix,
   DynamicTexture,
-  Ray,
+  WebXRDefaultExperience,
 } from "@babylonjs/core";
 import "@babylonjs/loaders";
 import ReactMarkdown from "react-markdown";
@@ -28,8 +28,8 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { atomDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
 import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
-import { AdvancedDynamicTexture, TextBlock } from "@babylonjs/gui";
 import Ammo from "ammojs-typed";
+import { AdvancedDynamicTexture, TextBlock, Button } from "@babylonjs/gui";
 
 interface MessageType {
   role: "user" | "assistant";
@@ -43,7 +43,7 @@ interface CodeProps {
   children?: React.ReactNode;
 }
 
-const MAX_TOKENS = 4000; // Adjust this value based on your model's limit
+const MAX_TOKENS = 4000;
 
 const AvatarSceneContent: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -54,7 +54,7 @@ const AvatarSceneContent: React.FC = () => {
   const [tokenCount, setTokenCount] = useState<number>(0);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const initializeThread = useCallback(async (): Promise<void> => {
+  const initializeThread = useCallback(async () => {
     try {
       const res = await fetch("/api/assistants/threads", { method: "POST" });
       const data: { threadId: string } = await res.json();
@@ -69,23 +69,21 @@ const AvatarSceneContent: React.FC = () => {
   }, [initializeThread]);
 
   useEffect(() => {
-    if (canvasRef.current === null) return;
+    if (!canvasRef.current) return;
 
     const engine = new Engine(canvasRef.current, true);
     const scene = new Scene(engine);
 
     Ammo().then((AmmoLib) => {
-      const ammoPlugin = new AmmoJSPlugin(true, AmmoLib);
-      scene.enablePhysics(new Vector3(0, -9.81, 0), ammoPlugin);
+      scene.enablePhysics(
+        new Vector3(0, -9.81, 0),
+        new AmmoJSPlugin(true, AmmoLib),
+      );
 
       // Lighting
       new HemisphericLight("light", new Vector3(0, 1, 0), scene);
-      const pointlight = new PointLight(
-        "pointLight",
-        new Vector3(0, 5, -5),
-        scene,
-      );
-      pointlight.intensity = 0.5; // Dim the point light
+      new PointLight("pointLight", new Vector3(0, 5, -5), scene).intensity =
+        0.5;
 
       // Create ground
       const ground = MeshBuilder.CreateGround(
@@ -93,14 +91,12 @@ const AvatarSceneContent: React.FC = () => {
         { width: 100, height: 100 },
         scene,
       );
-      ground.position.y = 0;
-
-      // Apply material to ground (optional)
-      const groundMaterial = new StandardMaterial("groundMaterial", scene);
-      groundMaterial.diffuseColor = new Color3(0.5, 0.5, 0.5);
-      ground.material = groundMaterial;
-
-      // Apply physics to ground
+      ground.material = new StandardMaterial("groundMaterial", scene);
+      (ground.material as StandardMaterial).diffuseColor = new Color3(
+        0.5,
+        0.5,
+        0.5,
+      );
       ground.physicsImpostor = new PhysicsImpostor(
         ground,
         PhysicsImpostor.BoxImpostor,
@@ -112,10 +108,7 @@ const AvatarSceneContent: React.FC = () => {
       SceneLoader.ImportMeshAsync("", "/", "classroom.glb", scene).then(
         (result) => {
           const classroomRoot = result.meshes[0];
-          classroomRoot.scaling = new Vector3(3, 3, 3); // Increased scaling
-          classroomRoot.position.y = 0;
-
-          // Apply physics to the root mesh
+          classroomRoot.scaling = new Vector3(3, 3, 3);
           classroomRoot.physicsImpostor = new PhysicsImpostor(
             classroomRoot,
             PhysicsImpostor.MeshImpostor,
@@ -123,12 +116,11 @@ const AvatarSceneContent: React.FC = () => {
             scene,
           );
 
-          // Find the blackboard mesh
+          // Blackboard setup
           const blackboard = classroomRoot
             .getChildMeshes()
             .find((mesh) => mesh.name === "blackboard.001_posters_0");
           if (blackboard) {
-            // Create a dynamic texture
             const dynamicTexture = new DynamicTexture(
               "dynamicTexture",
               { width: 1024, height: 512 },
@@ -136,57 +128,137 @@ const AvatarSceneContent: React.FC = () => {
               false,
             );
             const textureContext = dynamicTexture.getContext();
-
-            // Clear the texture
             textureContext.clearRect(
               0,
               0,
               dynamicTexture.getSize().width,
               dynamicTexture.getSize().height,
             );
-
-            // Rotate the context
             textureContext.save();
-            textureContext.translate(
-              dynamicTexture.getSize().width / 2,
-              dynamicTexture.getSize().height / 2,
-            );
-            textureContext.rotate(-Math.PI / 2);
-            textureContext.translate(
-              -dynamicTexture.getSize().height / 2,
-              -dynamicTexture.getSize().width / 2,
-            );
-
-            // Draw the URL onto the texture
+            textureContext.scale(1, -1);
+            textureContext.translate(0, -dynamicTexture.getSize().height);
             const url = "http://localhost:3000/student/content/molecule";
-            textureContext.font = "bold 36px Arial"; // Increase font size
+            textureContext.font = "bold 56px Arial";
             textureContext.fillStyle = "white";
-            const textWidth = textureContext.measureText(url).width;
             textureContext.fillText(
-              url,
-              0,
+              "What is DNA?",
+              50,
               dynamicTexture.getSize().height / 2,
-            ); // Adjust position to start from the beginning
-            // Restore the context
+            );
             textureContext.restore();
-
-            // Update the dynamic texture
             dynamicTexture.update();
-
-            // Apply the dynamic texture to the blackboard
             const blackboardMaterial = new StandardMaterial(
               "blackboardMaterial",
               scene,
             );
-            blackboardMaterial.diffuseColor = new Color3(1, 1, 1); // Set color to red
+            blackboardMaterial.diffuseColor = new Color3(1, 1, 1);
             blackboardMaterial.diffuseTexture = dynamicTexture;
             blackboard.material = blackboardMaterial;
-
-            // Add action manager to the blackboard
             blackboard.actionManager = new ActionManager(scene);
             blackboard.actionManager.registerAction(
               new ExecuteCodeAction(ActionManager.OnPickTrigger, () => {
-                window.location.href = url; // Navigate to the URL
+                window.location.href = url;
+              }),
+            );
+          }
+
+          // Load avatar model
+          SceneLoader.ImportMeshAsync("", "/", "avatar.glb", scene)
+            .then((avatarResult) => {
+              const avatarRoot = avatarResult.meshes[0];
+              avatarRoot.scaling = new Vector3(2.5, 2.5, 2.5);
+              avatarRoot.position = new Vector3(-2, 0.2, 20);
+              avatarRoot.rotation = new Vector3(0, Math.PI, 0);
+              if (avatarResult.animationGroups.length > 0) {
+                avatarResult.animationGroups[0].play(true);
+              }
+            })
+            .catch(console.error);
+
+          // WebXR setup
+          WebXRDefaultExperience.CreateAsync(scene, {
+            disableDefaultUI: true,
+            floorMeshes: [ground],
+          })
+            .then((xrHelper) => {
+              const enterVRButton = Button.CreateSimpleButton(
+                "enterVRButton",
+                "Enter VR",
+              );
+              enterVRButton.width = "150px";
+              enterVRButton.height = "40px";
+              enterVRButton.color = "white";
+              enterVRButton.cornerRadius = 20;
+              enterVRButton.background = "green";
+              enterVRButton.onPointerUpObservable.add(() => {
+                xrHelper.baseExperience.enterXRAsync(
+                  "immersive-vr",
+                  "local-floor",
+                );
+              });
+              AdvancedDynamicTexture.CreateFullscreenUI("UI").addControl(
+                enterVRButton,
+              );
+              enterVRButton.horizontalAlignment =
+                Button.HORIZONTAL_ALIGNMENT_RIGHT;
+              enterVRButton.verticalAlignment =
+                Button.VERTICAL_ALIGNMENT_BOTTOM;
+              enterVRButton.left = "-20px";
+              enterVRButton.top = "-20px";
+              if (!xrHelper.baseExperience) {
+                enterVRButton.isEnabled = false;
+                enterVRButton.background = "grey";
+              }
+            })
+            .catch(console.error);
+
+          // Door setup
+          const doorMesh = classroomRoot
+            .getChildMeshes()
+            .find((mesh) => mesh.name === "door_details_0");
+          if (doorMesh) {
+            doorMesh.actionManager = new ActionManager(scene);
+            doorMesh.actionManager.registerAction(
+              new ExecuteCodeAction(ActionManager.OnPickTrigger, () => {
+                window.location.href =
+                  "http://localhost:3000/student/content/transformer";
+              }),
+            );
+            const infoPlane = MeshBuilder.CreatePlane(
+              "infoPlane",
+              { width: 1, height: 0.3 },
+              scene,
+            );
+            infoPlane.parent = doorMesh;
+            infoPlane.position.y = 2.5;
+            infoPlane.rotation.y = Math.PI;
+            const infoTexture = AdvancedDynamicTexture.CreateForMesh(infoPlane);
+            const infoText = new TextBlock();
+            infoText.text = "Transformer";
+            infoText.color = "white";
+            infoText.fontSize = 24;
+            infoTexture.addControl(infoText);
+          }
+
+          // Shelf setup
+          const shelfMesh = classroomRoot
+            .getChildMeshes()
+            .find((mesh) => mesh.name === "shelf.001_details_0");
+          if (shelfMesh) {
+            shelfMesh.actionManager = new ActionManager(scene);
+            shelfMesh.actionManager.registerAction(
+              new ExecuteCodeAction(ActionManager.OnPickTrigger, () => {
+                window.location.href = "http://localhost:3000/student/content";
+              }),
+            );
+            shelfMesh.actionManager.registerAction(
+              new ExecuteCodeAction(ActionManager.OnPointerOverTrigger, () => {
+                document.body.style.cursor = "pointer";
+              }),
+            );
+            shelfMesh.actionManager.registerAction(
+              new ExecuteCodeAction(ActionManager.OnPointerOutTrigger, () => {
+                document.body.style.cursor = "default";
               }),
             );
           }
@@ -194,7 +266,7 @@ const AvatarSceneContent: React.FC = () => {
       );
 
       // Avatar setup
-      let avatar = MeshBuilder.CreateBox(
+      const avatar = MeshBuilder.CreateBox(
         "avatar",
         { height: 1, width: 1, depth: 1 },
         scene,
@@ -222,7 +294,7 @@ const AvatarSceneContent: React.FC = () => {
       });
 
       // Movement controls setup
-      let inputMap: { [key: string]: boolean } = {};
+      const inputMap: { [key: string]: boolean } = {};
       scene.actionManager = new ActionManager(scene);
       scene.actionManager.registerAction(
         new ExecuteCodeAction(ActionManager.OnKeyDownTrigger, (evt) => {
@@ -236,23 +308,24 @@ const AvatarSceneContent: React.FC = () => {
       );
 
       // Update loop for smoother movement
-      let moveDirection = Vector3.Zero();
+      const moveDirection = Vector3.Zero();
       scene.onBeforeRenderObservable.add(() => {
         if (avatar.physicsImpostor) {
-          moveDirection = Vector3.Zero();
+          moveDirection.setAll(0);
           if (inputMap["w"] || inputMap["ArrowUp"]) moveDirection.z += 1;
           if (inputMap["s"] || inputMap["ArrowDown"]) moveDirection.z -= 1;
           if (inputMap["a"] || inputMap["ArrowLeft"]) moveDirection.x -= 1;
           if (inputMap["d"] || inputMap["ArrowRight"]) moveDirection.x += 1;
 
-          moveDirection = Vector3.TransformCoordinates(
+          Vector3.TransformCoordinatesToRef(
             moveDirection.normalize(),
             Matrix.RotationY(camera.rotation.y),
+            moveDirection,
           );
 
           const currentVelocity =
             avatar.physicsImpostor.getLinearVelocity() || Vector3.Zero();
-          const targetVelocity = moveDirection.scale(5); // Adjust speed as needed
+          const targetVelocity = moveDirection.scale(5);
           const smoothedVelocity = new Vector3(
             lerp(currentVelocity.x, targetVelocity.x, 0.1),
             currentVelocity.y,
@@ -270,10 +343,8 @@ const AvatarSceneContent: React.FC = () => {
         }
       });
 
-      // Create a GUI layer
+      // GUI setup
       const guiTexture = AdvancedDynamicTexture.CreateFullscreenUI("UI");
-
-      // Add instruction text
       const instructionText = new TextBlock();
       instructionText.text =
         "Use WASD or arrow keys to move\nUse mouse to look around";
@@ -293,25 +364,17 @@ const AvatarSceneContent: React.FC = () => {
 
       // Prevent scrolling when spacebar is pressed
       const handleKeyDown = (event: KeyboardEvent) => {
-        if (event.code === "Space") {
-          event.preventDefault();
-        }
+        if (event.code === "Space") event.preventDefault();
       };
+      canvasRef.current?.addEventListener("keydown", handleKeyDown);
 
-      // Add event listener to the canvas
-      if (canvasRef.current)
-        canvasRef.current.addEventListener("keydown", handleKeyDown);
+      if (canvasRef.current) {
+        engine.runRenderLoop(() => scene.render());
+      }
+      window.addEventListener("resize", () => engine.resize());
 
-      engine.runRenderLoop(() => {
-        scene.render();
-      });
-      window.addEventListener("resize", () => {
-        engine.resize();
-      });
-
-      return (): void => {
+      return () => {
         engine.dispose();
-        // Remove event listener when component unmounts
         canvasRef.current?.removeEventListener("keydown", handleKeyDown);
       };
     });
@@ -349,7 +412,7 @@ const AvatarSceneContent: React.FC = () => {
       let assistantResponse = "";
       const timeout = setTimeout(() => {
         reject(new Error("Stream timeout"));
-      }, 30000); // 30 seconds timeout
+      }, 30000);
 
       stream.on("textCreated", (): void => {
         setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
@@ -385,8 +448,6 @@ const AvatarSceneContent: React.FC = () => {
   };
 
   const estimateTokens = (text: string): number => {
-    // This is a very rough estimate. For more accurate results,
-    // you might want to use a tokenizer library specific to your model.
     return Math.ceil(text.split(/\s+/).length * 1.3);
   };
 
@@ -431,7 +492,6 @@ const AvatarSceneContent: React.FC = () => {
         ) : (
           <FaChalkboardTeacher className="mr-2" />
         )}
-        {/* eslint-disable-next-line react/no-unescaped-entities */}
         <strong className="font-bold">
           {msg.role === "user" ? "Student" : "Teacher"}:
         </strong>
@@ -529,7 +589,6 @@ const AvatarSceneContent: React.FC = () => {
         ref={canvasRef}
         className="w-[70%] h-full"
         tabIndex={1}
-        // Add onFocus to ensure canvas can receive keyboard events
         onFocus={(e) => (e.currentTarget.style.outline = "none")}
       />
       <div className="w-[30%] h-full flex flex-col p-4 bg-gray-100">
@@ -579,7 +638,6 @@ const AvatarSceneContent: React.FC = () => {
   );
 };
 
-// Add this helper function outside of your component
 function lerp(start: number, end: number, amt: number): number {
   return (1 - amt) * start + amt * end;
 }

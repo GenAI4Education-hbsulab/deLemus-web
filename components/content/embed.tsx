@@ -13,8 +13,8 @@ const SketchfabEmbed: React.FC = () => {
 
   return (
     <>
-      <div dangerouslySetInnerHTML={{ __html: embedCode }} />
       <TransformerEmbed />
+      <div dangerouslySetInnerHTML={{ __html: embedCode }} />
     </>
   );
 };
