@@ -13,14 +13,12 @@ import {
   StandardMaterial,
   Color4,
   HighlightLayer,
-  WebXRDefaultExperience,
 } from "@babylonjs/core";
 import "@babylonjs/loaders";
 import "@babylonjs/gui";
 import "@babylonjs/materials";
 import "@babylonjs/serializers";
 import "@babylonjs/inspector"; // Optional, for debugging
-import { AdvancedDynamicTexture, Button } from "@babylonjs/gui";
 
 const MolecularView: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -56,12 +54,10 @@ const MolecularView: React.FC = () => {
           "Camera",
           Math.PI / 2,
           Math.PI / 2.5,
-          100,
-          new Vector3(0, 0, 0),
+          50,
+          Vector3.Zero(),
           scene,
         );
-        camera.setPosition(new Vector3(50, 50, 50));
-        camera.setTarget(Vector3.Zero());
         camera.attachControl(canvasRef.current, true);
 
         // Create a hemispheric light
@@ -73,8 +69,12 @@ const MolecularView: React.FC = () => {
         hemisphericLight.intensity = 0.6;
 
         // Create a point light
-        // const pointLight = new PointLight("pointLight", new Vector3(0, 50, -50), scene);
-        // pointLight.intensity = 0.6;
+        const pointLight = new PointLight(
+          "pointLight",
+          new Vector3(0, 50, -50),
+          scene,
+        );
+        pointLight.intensity = 0.6;
 
         // Create ground with a white material
         const ground = Mesh.CreateGround("ground", 500, 500, 10, scene);
@@ -92,103 +92,54 @@ const MolecularView: React.FC = () => {
             scene,
           );
           modelMesh = result.meshes[0] as Mesh;
-          modelMesh.position.y = 17; // Position the model above the ground
+          modelMesh.position.y = 20; // Position the model above the ground
 
           // Highlight layer
           const highlightLayer = new HighlightLayer("hl1", scene);
 
-          try {
-            // Hide the default VR button
-            const xrHelper = await WebXRDefaultExperience.CreateAsync(scene, {
-              disableDefaultUI: true,
-              floorMeshes: [ground],
-            });
+          const xrHelper = await scene.createDefaultXRExperienceAsync({
+            floorMeshes: [ground],
+          });
 
-            // Create custom Enter VR button
-            const advancedTexture =
-              AdvancedDynamicTexture.CreateFullscreenUI("UI");
-            const enterVRButton = Button.CreateSimpleButton(
-              "enterVRButton",
-              "Enter VR",
-            );
-            enterVRButton.width = "150px";
-            enterVRButton.height = "40px";
-            enterVRButton.color = "white";
-            enterVRButton.cornerRadius = 20;
-            enterVRButton.background = "green";
-            enterVRButton.onPointerUpObservable.add(() => {
-              xrHelper.baseExperience.enterXRAsync(
-                "immersive-vr",
-                "local-floor",
-              );
-            });
-            advancedTexture.addControl(enterVRButton);
+          let mesh: Mesh | null = null;
 
-            // Position the button
-            enterVRButton.horizontalAlignment =
-              Button.HORIZONTAL_ALIGNMENT_RIGHT;
-            enterVRButton.verticalAlignment = Button.VERTICAL_ALIGNMENT_BOTTOM;
-            enterVRButton.left = "-20px";
-            enterVRButton.top = "-20px";
-
-            // Check if WebXR is available
-            if (!xrHelper.baseExperience) {
-              console.log("WebXR not available on this device");
-              enterVRButton.isEnabled = false;
-              enterVRButton.background = "grey";
-            }
-
-            if (xrHelper.baseExperience) {
-              let mesh: Mesh | null = null;
-
-              xrHelper.input.onControllerAddedObservable.add((controller) => {
-                controller.onMotionControllerInitObservable.add(
-                  (motionController) => {
-                    if (
-                      motionController.handness === "left" ||
-                      motionController.handness === "right"
-                    ) {
-                      const xr_ids = motionController.getComponentIds();
-                      let triggerComponent = motionController.getComponent(
-                        xr_ids[0],
-                      );
-                      triggerComponent.onButtonStateChangedObservable.add(
-                        () => {
-                          if (triggerComponent.changes.pressed) {
-                            if (triggerComponent.pressed) {
-                              if (
-                                xrHelper.pointerSelection.getMeshUnderPointer
-                              ) {
-                                mesh =
-                                  xrHelper.pointerSelection.getMeshUnderPointer(
-                                    controller.uniqueId,
-                                  ) as Mesh;
-                              } else {
-                                mesh = scene.meshUnderPointer as Mesh;
-                              }
-                              if (mesh && mesh !== ground) {
-                                mesh.setParent(motionController.rootMesh);
-                                // Highlight the model when picked up
-                                highlightLayer.addMesh(mesh, Color3.Yellow());
-                              }
-                            } else if (mesh) {
-                              mesh.setParent(null);
-                              // Remove highlight when released
-                              highlightLayer.removeMesh(mesh);
-                            }
-                          }
-                        },
-                      );
+          xrHelper.input.onControllerAddedObservable.add((controller) => {
+            controller.onMotionControllerInitObservable.add(
+              (motionController) => {
+                if (
+                  motionController.handness === "left" ||
+                  motionController.handness === "right"
+                ) {
+                  const xr_ids = motionController.getComponentIds();
+                  let triggerComponent = motionController.getComponent(
+                    xr_ids[0],
+                  );
+                  triggerComponent.onButtonStateChangedObservable.add(() => {
+                    if (triggerComponent.changes.pressed) {
+                      if (triggerComponent.pressed) {
+                        if (xrHelper.pointerSelection.getMeshUnderPointer) {
+                          mesh = xrHelper.pointerSelection.getMeshUnderPointer(
+                            controller.uniqueId,
+                          ) as Mesh;
+                        } else {
+                          mesh = scene.meshUnderPointer as Mesh;
+                        }
+                        if (mesh && mesh !== ground) {
+                          mesh.setParent(motionController.rootMesh);
+                          // Highlight the model when picked up
+                          highlightLayer.addMesh(mesh, Color3.Yellow());
+                        }
+                      } else if (mesh) {
+                        mesh.setParent(null);
+                        // Remove highlight when released
+                        highlightLayer.removeMesh(mesh);
+                      }
                     }
-                  },
-                );
-              });
-            } else {
-              console.log("WebXR not available on this device");
-            }
-          } catch (error) {
-            console.error("Error initializing WebXR:", error);
-          }
+                  });
+                }
+              },
+            );
+          });
         };
 
         createScene();
@@ -210,12 +161,7 @@ const MolecularView: React.FC = () => {
     initializeBabylon();
   }, []);
 
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{ width: "100%", height: "100%", display: "block" }}
-    />
-  );
+  return <canvas ref={canvasRef} style={{ width: "100%", height: "100%" }} />;
 };
 
 export default MolecularView;
