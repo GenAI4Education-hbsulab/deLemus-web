@@ -20,9 +20,6 @@ import {
   MeshBuilder,
   ActionManager,
   ExecuteCodeAction,
-  PointerDragBehavior,
-  TransformNode,
-  WebXRFeatureName,
 } from "@babylonjs/core";
 import "@babylonjs/loaders";
 import "@babylonjs/gui";
@@ -122,23 +119,7 @@ const TransformerEmbed: React.FC = () => {
             const xrHelper = await WebXRDefaultExperience.CreateAsync(scene, {
               disableDefaultUI: true,
               floorMeshes: [ground],
-              optionalFeatures: true,
             });
-
-            // Enable teleportation
-            const featuresManager = xrHelper.baseExperience.featuresManager;
-            featuresManager.enableFeature(
-              WebXRFeatureName.TELEPORTATION,
-              "stable",
-              {
-                floorMeshes: [ground],
-                defaultTargetMeshOptions: {
-                  torusArrowMaterial: {
-                    diffuseColor: new Color3(0, 1, 0),
-                  },
-                },
-              },
-            );
 
             const advancedTexture =
               AdvancedDynamicTexture.CreateFullscreenUI("UI");
@@ -168,40 +149,6 @@ const TransformerEmbed: React.FC = () => {
             if (!xrHelper.baseExperience) {
               enterVRButton.isEnabled = false;
               enterVRButton.background = "grey";
-            }
-
-            if (xrHelper.baseExperience) {
-              xrHelper.input.onControllerAddedObservable.add((controller) => {
-                controller.onMotionControllerInitObservable.add(
-                  (motionController) => {
-                    const xr_ids = motionController.getComponentIds();
-                    let triggerComponent = motionController.getComponent(
-                      xr_ids[0],
-                    );
-
-                    triggerComponent.onButtonStateChangedObservable.add(() => {
-                      if (triggerComponent.changes.pressed) {
-                        if (triggerComponent.pressed) {
-                          const mesh = scene.meshUnderPointer as Mesh;
-                          if (mesh && mesh.name === "buttonPlane") {
-                            // Trigger the video play/pause action
-                            if (videoTexture.video.paused) {
-                              videoTexture.video.muted = false;
-                              videoTexture.video.play();
-                              updateButtonText("Pause");
-                              buttonMaterial.diffuseColor = new Color3(1, 0, 0);
-                            } else {
-                              videoTexture.video.pause();
-                              updateButtonText("Play");
-                              buttonMaterial.diffuseColor = new Color3(0, 1, 0);
-                            }
-                          }
-                        }
-                      }
-                    });
-                  },
-                );
-              });
             }
           } catch (error) {
             console.error("Error initializing WebXR:", error);
