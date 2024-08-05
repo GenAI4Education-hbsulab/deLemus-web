@@ -20,6 +20,9 @@ import {
   MeshBuilder,
   ActionManager,
   ExecuteCodeAction,
+  PointerDragBehavior,
+  TransformNode,
+  WebXRFeatureName,
 } from "@babylonjs/core";
 import "@babylonjs/loaders";
 import "@babylonjs/gui";
@@ -28,6 +31,7 @@ import {
   Button,
   ScrollViewer,
   TextBlock,
+  Control,
 } from "@babylonjs/gui";
 
 const TransformerEmbed: React.FC = () => {
@@ -38,7 +42,10 @@ const TransformerEmbed: React.FC = () => {
     // Fetch the notes content
     fetch("/lecture-notes.md")
       .then((response) => response.text())
-      .then((text) => setNotesContent(text))
+      .then((text) => {
+        console.log("Loaded notes content:", text); // Debug log
+        setNotesContent(text);
+      })
       .catch((error) => console.error("Error loading notes:", error));
 
     const preventDefault = (e: Event) => e.preventDefault();
@@ -115,7 +122,23 @@ const TransformerEmbed: React.FC = () => {
             const xrHelper = await WebXRDefaultExperience.CreateAsync(scene, {
               disableDefaultUI: true,
               floorMeshes: [ground],
+              optionalFeatures: true,
             });
+
+            // Enable teleportation
+            const featuresManager = xrHelper.baseExperience.featuresManager;
+            featuresManager.enableFeature(
+              WebXRFeatureName.TELEPORTATION,
+              "stable",
+              {
+                floorMeshes: [ground],
+                defaultTargetMeshOptions: {
+                  torusArrowMaterial: {
+                    diffuseColor: new Color3(0, 1, 0),
+                  },
+                },
+              },
+            );
 
             const advancedTexture =
               AdvancedDynamicTexture.CreateFullscreenUI("UI");
@@ -146,6 +169,40 @@ const TransformerEmbed: React.FC = () => {
               enterVRButton.isEnabled = false;
               enterVRButton.background = "grey";
             }
+
+            if (xrHelper.baseExperience) {
+              xrHelper.input.onControllerAddedObservable.add((controller) => {
+                controller.onMotionControllerInitObservable.add(
+                  (motionController) => {
+                    const xr_ids = motionController.getComponentIds();
+                    let triggerComponent = motionController.getComponent(
+                      xr_ids[0],
+                    );
+
+                    triggerComponent.onButtonStateChangedObservable.add(() => {
+                      if (triggerComponent.changes.pressed) {
+                        if (triggerComponent.pressed) {
+                          const mesh = scene.meshUnderPointer as Mesh;
+                          if (mesh && mesh.name === "buttonPlane") {
+                            // Trigger the video play/pause action
+                            if (videoTexture.video.paused) {
+                              videoTexture.video.muted = false;
+                              videoTexture.video.play();
+                              updateButtonText("Pause");
+                              buttonMaterial.diffuseColor = new Color3(1, 0, 0);
+                            } else {
+                              videoTexture.video.pause();
+                              updateButtonText("Play");
+                              buttonMaterial.diffuseColor = new Color3(0, 1, 0);
+                            }
+                          }
+                        }
+                      }
+                    });
+                  },
+                );
+              });
+            }
           } catch (error) {
             console.error("Error initializing WebXR:", error);
           }
@@ -157,7 +214,7 @@ const TransformerEmbed: React.FC = () => {
             "video",
             "/transformer.mp4",
             scene,
-            true,
+            false, // Don't initialize the video immediately
             false, // Don't autoplay
             undefined,
             {
@@ -168,6 +225,7 @@ const TransformerEmbed: React.FC = () => {
           videoTexture.video.muted = true; // Ensure it starts muted
           videoTexture.video.volume = 1.0;
           videoTexture.video.autoplay = false; // Explicitly set autoplay to false
+          videoTexture.video.load(); // Load the video without playing it
           videoMaterial.diffuseTexture = videoTexture;
           videoMaterial.emissiveColor = new Color3(0.5, 0.5, 0.5);
           videoTexture.video.onplaying = () => {
@@ -193,6 +251,8 @@ const TransformerEmbed: React.FC = () => {
           scrollViewer.width = 1;
           scrollViewer.height = 1;
           scrollViewer.background = "white";
+          scrollViewer.thickness = 10; // Increase thickness for better visibility
+          scrollViewer.color = "gray";
           advancedTexture.addControl(scrollViewer);
 
           const textBlock = new TextBlock();
@@ -201,35 +261,60 @@ const TransformerEmbed: React.FC = () => {
           textBlock.fontSize = 24;
           textBlock.textWrapping = true;
           textBlock.width = 0.9;
-          textBlock.height = "1000px";
+          textBlock.height = "1000px"; // Adjust this value based on your content length
           scrollViewer.addControl(textBlock);
 
-          // Add scroll buttons
-          const upButton = Button.CreateSimpleButton("upButton", "▲");
-          upButton.width = "50px";
-          upButton.height = "50px";
-          upButton.color = "white";
-          upButton.background = "green";
-          upButton.verticalAlignment = 0;
-          upButton.left = "460px";
-          upButton.top = "10px";
-          upButton.onPointerUpObservable.add(() => {
-            scrollViewer.verticalBar.value -= 0.1;
-          });
-          advancedTexture.addControl(upButton);
+          // Add mouse wheel scrolling
+          notesPlane.actionManager = new ActionManager(scene);
+          notesPlane.actionManager.registerAction(
+            new ExecuteCodeAction(ActionManager.OnPointerOverTrigger, (evt) => {
+              const delta =
+                evt.sourceEvent.deltaY ||
+                evt.sourceEvent.detail ||
+                evt.sourceEvent.wheelDelta;
+              if (delta) {
+                const scrollAmount = delta > 0 ? 0.1 : -0.1;
+                scrollViewer.verticalBar.value += scrollAmount;
+              }
+            }),
+          );
 
-          const downButton = Button.CreateSimpleButton("downButton", "▼");
-          downButton.width = "50px";
-          downButton.height = "50px";
-          downButton.color = "white";
-          downButton.background = "green";
-          downButton.verticalAlignment = 1;
-          downButton.left = "460px";
-          downButton.top = "-10px";
-          downButton.onPointerUpObservable.add(() => {
-            scrollViewer.verticalBar.value += 0.1;
-          });
-          advancedTexture.addControl(downButton);
+          // Improve scroll buttons
+          const createScrollButton = (
+            name: string,
+            text: string,
+            verticalAlignment: number,
+            scrollDirection: number,
+          ) => {
+            const button = Button.CreateSimpleButton(name, text);
+            button.width = "40px";
+            button.height = "40px";
+            button.color = "white";
+            button.thickness = 2;
+            button.cornerRadius = 20;
+            button.background = "green";
+            button.verticalAlignment = verticalAlignment;
+            button.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_RIGHT;
+            button.left = "-10px";
+            button.top = verticalAlignment === 0 ? "10px" : "-10px";
+            button.onPointerUpObservable.add(() => {
+              scrollViewer.verticalBar.value += scrollDirection * 0.1;
+            });
+            advancedTexture.addControl(button);
+          };
+
+          createScrollButton(
+            "upButton",
+            "▲",
+            Control.VERTICAL_ALIGNMENT_TOP,
+            -1,
+          );
+          createScrollButton(
+            "downButton",
+            "▼",
+            Control.VERTICAL_ALIGNMENT_BOTTOM,
+            1,
+          );
 
           const screenLight = new SpotLight(
             "screenLight",
@@ -272,8 +357,6 @@ const TransformerEmbed: React.FC = () => {
             ctx.clearRect(0, 0, 256, 64);
             ctx.fillStyle = "white";
             ctx.font = "bold 40px Arial";
-            // ctx.textAlign = "center";
-            // ctx.textBaseline = "middle";
             ctx.fillText(text, 128, 32);
             buttonTexture.update();
           }
