@@ -137,7 +137,7 @@ const AvatarSceneContent: React.FC = () => {
             textureContext.save();
             textureContext.scale(1, -1);
             textureContext.translate(0, -dynamicTexture.getSize().height);
-            const url = "http://localhost:3000/student/content/molecule";
+            const url = "/student/content/molecule";
             textureContext.font = "bold 56px Arial";
             textureContext.fillStyle = "white";
             textureContext.fillText(
@@ -220,8 +220,7 @@ const AvatarSceneContent: React.FC = () => {
             doorMesh.actionManager = new ActionManager(scene);
             doorMesh.actionManager.registerAction(
               new ExecuteCodeAction(ActionManager.OnPickTrigger, () => {
-                window.location.href =
-                  "http://localhost:3000/student/content/transformer";
+                window.location.href = "/student/content/transformer";
               }),
             );
             const infoPlane = MeshBuilder.CreatePlane(
@@ -248,7 +247,7 @@ const AvatarSceneContent: React.FC = () => {
             shelfMesh.actionManager = new ActionManager(scene);
             shelfMesh.actionManager.registerAction(
               new ExecuteCodeAction(ActionManager.OnPickTrigger, () => {
-                window.location.href = "http://localhost:3000/student/content";
+                window.location.href = "/student/content";
               }),
             );
             shelfMesh.actionManager.registerAction(

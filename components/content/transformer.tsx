@@ -158,12 +158,18 @@ const TransformerEmbed: React.FC = () => {
             "/transformer.mp4",
             scene,
             true,
+            false, // Don't autoplay
+            undefined,
+            {
+              autoUpdateTexture: true,
+              muted: true, // Start muted
+            },
           );
+          videoTexture.video.muted = true; // Ensure it starts muted
+          videoTexture.video.volume = 1.0;
+          videoTexture.video.autoplay = false; // Explicitly set autoplay to false
           videoMaterial.diffuseTexture = videoTexture;
           videoMaterial.emissiveColor = new Color3(0.5, 0.5, 0.5);
-          videoTexture.video.muted = false;
-          videoTexture.video.volume = 1.0;
-          videoTexture.video.play();
           videoTexture.video.onplaying = () => {
             console.log("Video is playing");
           };
@@ -280,6 +286,7 @@ const TransformerEmbed: React.FC = () => {
           buttonPlane.actionManager.registerAction(
             new ExecuteCodeAction(ActionManager.OnPickTrigger, function () {
               if (videoTexture.video.paused) {
+                videoTexture.video.muted = false; // Unmute when playing
                 videoTexture.video.play();
                 updateButtonText("Pause");
                 buttonMaterial.diffuseColor = new Color3(1, 0, 0); // Red when playing
