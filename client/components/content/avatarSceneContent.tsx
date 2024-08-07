@@ -297,13 +297,21 @@ const AvatarSceneContent: React.FC = () => {
       camera.setTarget(avatar.position);
       camera.attachControl(canvasRef.current, true);
 
+      let lastSentPos = new Vector3(0, 0, 0);
+      let lastSentRot = new Vector3(0, 0, 0);
+      const threshold = 0.1;
       // Update camera position in the render loop
       scene.onBeforeRenderObservable.add(() => {
-        camera.position = avatar.position.add(new Vector3(0, 5, -1));
-        // let lastPos = avatar.position; // add constraints later to help with performance
+        camera.position = avatar.position.add(new Vector3(0, 5, 0));
         if (room) {
-          room.send("updatePosition", avatar.position);
-          room.send("updateRotation", camera.rotation);
+          if (Vector3.Distance(avatar.position, lastSentPos) >= threshold) {
+            room.send("updatePosition", avatar.position);
+            lastSentPos = avatar.position;
+          }
+          if (Vector3.Distance(camera.rotation, lastSentRot) >= threshold) {
+            room.send("updateRotation", camera.rotation);
+            lastSentRot = camera.rotation;
+          }
         }
       });
 
