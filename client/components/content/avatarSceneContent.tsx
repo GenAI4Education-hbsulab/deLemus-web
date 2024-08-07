@@ -169,25 +169,25 @@ const AvatarSceneContent: React.FC = () => {
       pointlight.intensity = 0.5; // Dim the point light
 
       // Create ground
-      const ground = MeshBuilder.CreateGround(
-        "ground",
-        { width: 100, height: 100 },
-        scene,
-      );
-      ground.position.y = 0;
+      // const ground = MeshBuilder.CreateGround(
+      //   "ground",
+      //   { width: 100, height: 100 },
+      //   scene,
+      // );
+      // ground.position.y = 0;
 
-      // Apply material to ground (optional)
-      const groundMaterial = new StandardMaterial("groundMaterial", scene);
-      groundMaterial.diffuseColor = new Color3(0.5, 0.5, 0.5);
-      ground.material = groundMaterial;
+      // // Apply material to ground (optional)
+      // const groundMaterial = new StandardMaterial("groundMaterial", scene);
+      // groundMaterial.diffuseColor = new Color3(0.5, 0.5, 0.5);
+      // ground.material = groundMaterial;
 
-      // Apply physics to ground
-      ground.physicsImpostor = new PhysicsImpostor(
-        ground,
-        PhysicsImpostor.BoxImpostor,
-        { mass: 0, restitution: 0.9 },
-        scene,
-      );
+      // // Apply physics to ground
+      // ground.physicsImpostor = new PhysicsImpostor(
+      //   ground,
+      //   PhysicsImpostor.BoxImpostor,
+      //   { mass: 0, restitution: 0.9 },
+      //   scene,
+      // );
 
       // Load environment
       SceneLoader.ImportMeshAsync("", "/", "classroom.glb", scene).then(
