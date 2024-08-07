@@ -21,6 +21,7 @@ import {
   Matrix,
   DynamicTexture,
   Ray,
+  Mesh,
 } from "@babylonjs/core";
 import "@babylonjs/loaders";
 import ReactMarkdown from "react-markdown";
@@ -30,6 +31,8 @@ import remarkGfm from "remark-gfm";
 import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
 import { AdvancedDynamicTexture, TextBlock } from "@babylonjs/gui";
 import Ammo from "ammojs-typed";
+import * as Colyseus from "colyseus.js"
+import { Staatliches } from "next/font/google";
 
 interface MessageType {
   role: "user" | "assistant";
@@ -45,6 +48,36 @@ interface CodeProps {
 
 const MAX_TOKENS = 4000; // Adjust this value based on your model's limit
 
+interface PlayerData {
+  id: string,
+  posX: number,
+  posY: number,
+  posZ: number,
+  rotX: number,
+  rotY: number,
+  rotZ: number,
+}
+
+function createPlayerAvatar(scene: Scene, id: string, position: Vector3, rotation: Vector3) {
+  const avatar = MeshBuilder.CreateBox(
+    `player_${id}`,
+    { height: 1, width: 1, depth: 1 },
+    scene
+  );
+
+  avatar.position = position || new Vector3(0, 5, 0);
+  avatar.rotation = rotation || new Vector3(0, 0, 0);
+
+  avatar.physicsImpostor = new PhysicsImpostor(
+    avatar,
+    PhysicsImpostor.BoxImpostor,
+    { mass: 1, friction: 0.5, restitution: 0.3 },
+    scene
+  );
+
+  return avatar;
+}
+
 const AvatarSceneContent: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [userInput, setUserInput] = useState<string>("");
@@ -53,6 +86,8 @@ const AvatarSceneContent: React.FC = () => {
   const [inputDisabled, setInputDisabled] = useState<boolean>(false);
   const [tokenCount, setTokenCount] = useState<number>(0);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
+  let room: Colyseus.Room;
+  let playerMesh: { [key: string]: Mesh } = {};
 
   const initializeThread = useCallback(async (): Promise<void> => {
     try {
@@ -68,6 +103,7 @@ const AvatarSceneContent: React.FC = () => {
     void initializeThread();
   }, [initializeThread]);
 
+
   useEffect(() => {
     if (canvasRef.current === null) return;
 
@@ -77,6 +113,51 @@ const AvatarSceneContent: React.FC = () => {
     Ammo().then((AmmoLib) => {
       const ammoPlugin = new AmmoJSPlugin(true, AmmoLib);
       scene.enablePhysics(new Vector3(0, -9.81, 0), ammoPlugin);
+
+      // Server
+      const client = new Colyseus.Client("http://localhost:2567");
+      client
+        .joinOrCreate("my_room")
+        .then((roomInstance: Colyseus.Room) => {
+          room = roomInstance;
+          console.log("Connected to roomId: " + room.roomId);
+
+          // console.log("Initial players:");
+          room.state.players.onAdd((player: any, key: string) => {
+            console.log(player.id, "has been added");
+            console.log(`pos: ${player.posX} ${player.posY} ${player.posZ}`);
+            console.log(room.state);
+
+            let isCurPlayer = room.sessionId === key
+
+
+            if (!isCurPlayer) playerMesh[key] = createPlayerAvatar(
+              scene,
+              player.id,
+              new Vector3(player.posX, player.posY, player.posZ),
+              new Vector3(player.rotX, player.rotY, player.rotZ)
+            );
+            console.log(playerMesh);
+
+            player.onChange(() => {
+              if (room.sessionId != key) {
+                playerMesh[key].position.set(player.posX, player.posY, player.posZ);
+              }
+            });
+          });
+
+          room.state.players.onRemove((player: any, key: string) => {
+            console.log(player.id, "has been removed");
+            if (playerMesh[key]) {
+              playerMesh[key].dispose();
+              delete playerMesh[key];
+            }
+          });
+
+        })
+        .catch(function (error) {
+          console.log("Couldn't connect. ", error);
+        });
 
       // Lighting
       new HemisphericLight("light", new Vector3(0, 1, 0), scene);
@@ -210,7 +291,7 @@ const AvatarSceneContent: React.FC = () => {
       // Camera setup
       const camera = new UniversalCamera(
         "camera",
-        new Vector3(0, 5, -10),
+        new Vector3(0, 5, -1),
         scene,
       );
       camera.setTarget(avatar.position);
@@ -218,7 +299,12 @@ const AvatarSceneContent: React.FC = () => {
 
       // Update camera position in the render loop
       scene.onBeforeRenderObservable.add(() => {
-        camera.position = avatar.position.add(new Vector3(0, 5, -10));
+        camera.position = avatar.position.add(new Vector3(0, 5, -1));
+        // let lastPos = avatar.position; // add constraints later to help with performance
+        if (room) {
+          room.send("updatePosition", avatar.position);
+          room.send("updateRotation", camera.rotation);
+        }
       });
 
       // Movement controls setup
