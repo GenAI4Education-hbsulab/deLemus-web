@@ -22,6 +22,7 @@ import {
   DynamicTexture,
   Ray,
   Mesh,
+  Material,
 } from "@babylonjs/core";
 import "@babylonjs/loaders";
 import ReactMarkdown from "react-markdown";
@@ -48,16 +49,6 @@ interface CodeProps {
 
 const MAX_TOKENS = 4000; // Adjust this value based on your model's limit
 
-interface PlayerData {
-  id: string,
-  posX: number,
-  posY: number,
-  posZ: number,
-  rotX: number,
-  rotY: number,
-  rotZ: number,
-}
-
 function createPlayerAvatar(scene: Scene, id: string, position: Vector3, rotation: Vector3) {
   const avatar = MeshBuilder.CreateBox(
     `player_${id}`,
@@ -71,11 +62,30 @@ function createPlayerAvatar(scene: Scene, id: string, position: Vector3, rotatio
   avatar.physicsImpostor = new PhysicsImpostor(
     avatar,
     PhysicsImpostor.BoxImpostor,
-    { mass: 1, friction: 0.5, restitution: 0.3 },
+    { mass: 0, friction: 0.5, restitution: 0.3 },
     scene
   );
 
   return avatar;
+}
+
+function createWall(scene: Scene, width: number, height: number, position: Vector3, rotation: Vector3, material: Material) {
+  const wall = MeshBuilder.CreateBox(
+    "wall",
+    { width: width, height: height, depth: 1 }, // Set depth to a small value for a thin wall
+    scene
+  );
+  wall.position = position;
+  wall.rotation = rotation;
+  wall.material = material;
+
+  // Apply physics to the wall if needed
+  wall.physicsImpostor = new PhysicsImpostor(
+    wall,
+    PhysicsImpostor.BoxImpostor,
+    { mass: 0, restitution: 0.9 },
+    scene
+  );
 }
 
 const AvatarSceneContent: React.FC = () => {
@@ -130,7 +140,6 @@ const AvatarSceneContent: React.FC = () => {
 
             let isCurPlayer = room.sessionId === key
 
-
             if (!isCurPlayer) playerMesh[key] = createPlayerAvatar(
               scene,
               player.id,
@@ -142,6 +151,7 @@ const AvatarSceneContent: React.FC = () => {
             player.onChange(() => {
               if (room.sessionId != key) {
                 playerMesh[key].position.set(player.posX, player.posY, player.posZ);
+                playerMesh[key].rotation.set(player.rotX, player.rotY, player.rotZ)
               }
             });
           });
@@ -156,7 +166,7 @@ const AvatarSceneContent: React.FC = () => {
 
         })
         .catch(function (error) {
-          console.log("Couldn't connect. ", error);
+          console.log("Couldn't connect.", error);
         });
 
       // Lighting
@@ -168,41 +178,62 @@ const AvatarSceneContent: React.FC = () => {
       );
       pointlight.intensity = 0.5; // Dim the point light
 
+      const transparentMaterial = new StandardMaterial("transparentMaterial", scene);
+      transparentMaterial.alpha = 0;
+
       // Create ground
-      // const ground = MeshBuilder.CreateGround(
-      //   "ground",
-      //   { width: 100, height: 100 },
-      //   scene,
-      // );
-      // ground.position.y = 0;
+      const ground = MeshBuilder.CreateGround(
+        "ground",
+        { width: 40, height: 50 },
+        scene,
+      );
+      ground.position.y = 0;
+      ground.material = transparentMaterial;
 
-      // // Apply material to ground (optional)
-      // const groundMaterial = new StandardMaterial("groundMaterial", scene);
-      // groundMaterial.diffuseColor = new Color3(0.5, 0.5, 0.5);
-      // ground.material = groundMaterial;
+      // Apply physics to ground
+      ground.physicsImpostor = new PhysicsImpostor(
+        ground,
+        PhysicsImpostor.BoxImpostor,
+        { mass: 0, restitution: 0.9 },
+        scene,
+      );
 
-      // // Apply physics to ground
-      // ground.physicsImpostor = new PhysicsImpostor(
-      //   ground,
-      //   PhysicsImpostor.BoxImpostor,
-      //   { mass: 0, restitution: 0.9 },
-      //   scene,
-      // );
+      const step = MeshBuilder.CreateBox(
+        "step",
+        { width: 14, height: 0.7, depth: 12 },
+        scene,
+      );
+      step.position = new Vector3(-2, 0, 18.5);
+      step.material = transparentMaterial;
+      step.physicsImpostor = new PhysicsImpostor(
+        step,
+        PhysicsImpostor.BoxImpostor,
+        { mass: 0, restitution: 0.9 },
+        scene,
+      );
+
+      createWall(scene, 40, 20, new Vector3(0, 10, -22), Vector3.Zero(), transparentMaterial);
+      createWall(scene, 50, 20, new Vector3(-17, 10, 0), new Vector3(0, Math.PI / 2), transparentMaterial);
+      createWall(scene, 50, 20, new Vector3(13, 10, 0), new Vector3(0, Math.PI / 2), transparentMaterial);
+      createWall(scene, 40, 20, new Vector3(0, 10, 24), Vector3.Zero(), transparentMaterial);
 
       // Load environment
       SceneLoader.ImportMeshAsync("", "/", "classroom.glb", scene).then(
         (result) => {
+          console.log(result.meshes);
+
           const classroomRoot = result.meshes[0];
+          console.log(classroomRoot);
           classroomRoot.scaling = new Vector3(3, 3, 3); // Increased scaling
           classroomRoot.position.y = 0;
 
           // Apply physics to the root mesh
-          classroomRoot.physicsImpostor = new PhysicsImpostor(
-            classroomRoot,
-            PhysicsImpostor.MeshImpostor,
-            { mass: 0, restitution: 0.9 },
-            scene,
-          );
+          // classroomRoot.physicsImpostor = new PhysicsImpostor(
+          //   classroomRoot,
+          //   PhysicsImpostor.MeshImpostor,
+          //   { mass: 0, restitution: 0.9 },
+          //   scene,
+          // );
 
           // Find the blackboard mesh
           const blackboard = classroomRoot
@@ -306,11 +337,11 @@ const AvatarSceneContent: React.FC = () => {
         if (room) {
           if (Vector3.Distance(avatar.position, lastSentPos) >= threshold) {
             room.send("updatePosition", avatar.position);
-            lastSentPos = avatar.position;
+            lastSentPos.copyFrom(avatar.position);
           }
           if (Vector3.Distance(camera.rotation, lastSentRot) >= threshold) {
             room.send("updateRotation", camera.rotation);
-            lastSentRot = camera.rotation;
+            lastSentRot.copyFrom(camera.rotation);
           }
         }
       });
