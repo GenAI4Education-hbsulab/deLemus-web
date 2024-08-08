@@ -186,12 +186,12 @@ const AvatarSceneContent: React.FC = () => {
         { width: 40, height: 50 },
         scene,
       );
-      ground.material = new StandardMaterial("groundMaterial", scene);
-      (ground.material as StandardMaterial).diffuseColor = new Color3(
-        0.5,
-        0.5,
-        0.5,
-      );
+      // ground.material = new StandardMaterial("groundMaterial", scene);
+      // (ground.material as StandardMaterial).diffuseColor = new Color3(
+      //   0.5,
+      //   0.5,
+      //   0.5,
+      // );
       ground.physicsImpostor = new PhysicsImpostor(
         ground,
         PhysicsImpostor.BoxImpostor,
