@@ -173,30 +173,27 @@ const AvatarSceneContent: React.FC = () => {
         });
 
       // Lighting
-      new HemisphericLight("light", new Vector3(0, 1, 0), scene);
-      new PointLight("pointLight", new Vector3(0, 5, -5), scene).intensity =
-        0.5;
+      const hemisphericLight = new HemisphericLight("light", new Vector3(0, 1, 0), scene);
+      hemisphericLight.intensity = 0.7;
+
+      const pointLight = new PointLight("pointLight", new Vector3(0, 5, -5), scene);
+      pointLight.intensity = 0.5;
 
       const transparentMaterial = new StandardMaterial("transparentMaterial", scene);
       transparentMaterial.alpha = 0;
 
-      // Create ground
-      const ground = MeshBuilder.CreateGround(
-        "ground",
+      // Create invisible ground for physics
+      const invisibleGround = MeshBuilder.CreateGround(
+        "invisibleGround",
         { width: 40, height: 50 },
-        scene,
+        scene
       );
-      // ground.material = new StandardMaterial("groundMaterial", scene);
-      // (ground.material as StandardMaterial).diffuseColor = new Color3(
-      //   0.5,
-      //   0.5,
-      //   0.5,
-      // );
-      ground.physicsImpostor = new PhysicsImpostor(
-        ground,
+      invisibleGround.visibility = 0; // Make it invisible
+      invisibleGround.physicsImpostor = new PhysicsImpostor(
+        invisibleGround,
         PhysicsImpostor.BoxImpostor,
         { mass: 0, restitution: 0.9 },
-        scene,
+        scene
       );
 
       const step = MeshBuilder.CreateBox(
@@ -213,10 +210,10 @@ const AvatarSceneContent: React.FC = () => {
         scene,
       );
 
-      createWall(scene, 40, 20, new Vector3(0, 10, -22), Vector3.Zero(), transparentMaterial);
-      createWall(scene, 50, 20, new Vector3(-17, 10, 0), new Vector3(0, Math.PI / 2), transparentMaterial);
-      createWall(scene, 50, 20, new Vector3(13, 10, 0), new Vector3(0, Math.PI / 2), transparentMaterial);
-      createWall(scene, 40, 20, new Vector3(0, 10, 24), Vector3.Zero(), transparentMaterial);
+      // createWall(scene, 40, 20, new Vector3(0, 10, -22), Vector3.Zero(), transparentMaterial);
+      // createWall(scene, 50, 20, new Vector3(-17, 10, 0), new Vector3(0, Math.PI / 2), transparentMaterial);
+      // createWall(scene, 50, 20, new Vector3(13, 10, 0), new Vector3(0, Math.PI / 2), transparentMaterial);
+      // createWall(scene, 40, 20, new Vector3(0, 10, 24), Vector3.Zero(), transparentMaterial);
 
       // Load environment
       SceneLoader.ImportMeshAsync("", "/", "classroom.glb", scene).then(
@@ -225,6 +222,16 @@ const AvatarSceneContent: React.FC = () => {
 
           const classroomRoot = result.meshes[0];
           classroomRoot.scaling = new Vector3(3, 3, 3);
+          
+          // Ensure materials are properly applied
+          result.meshes.forEach((mesh) => {
+            if (mesh.material) {
+              // mesh.material.needAlphaBlending = true;
+              mesh.material.forceDepthWrite = true;
+            }
+          });
+
+          // Apply physics to the classroom root
           classroomRoot.physicsImpostor = new PhysicsImpostor(
             classroomRoot,
             PhysicsImpostor.MeshImpostor,
@@ -294,7 +301,7 @@ const AvatarSceneContent: React.FC = () => {
           // WebXR setup
           WebXRDefaultExperience.CreateAsync(scene, {
             disableDefaultUI: true,
-            floorMeshes: [ground],
+            floorMeshes: [invisibleGround], // Use invisibleGround instead of ground
           })
             .then((xrHelper) => {
               const enterVRButton = Button.CreateSimpleButton(
@@ -397,7 +404,7 @@ const AvatarSceneContent: React.FC = () => {
       // Camera setup
       const camera = new UniversalCamera(
         "camera",
-        new Vector3(0, 5, -1),
+        new Vector3(0, 5, -10),
         scene,
       );
       camera.setTarget(avatar.position);
@@ -408,7 +415,8 @@ const AvatarSceneContent: React.FC = () => {
       const threshold = 0.1;
       // Update camera position in the render loop
       scene.onBeforeRenderObservable.add(() => {
-        camera.position = avatar.position.add(new Vector3(0, 5, 0));
+        const cameraOffset = new Vector3(0, 5, -10); // Adjust these values to change camera distance
+        camera.position = avatar.position.add(cameraOffset);
         if (room) {
           if (Vector3.Distance(avatar.position, lastSentPos) >= threshold) {
             room.send("updatePosition", avatar.position);
