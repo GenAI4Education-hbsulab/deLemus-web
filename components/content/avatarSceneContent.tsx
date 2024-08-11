@@ -37,6 +37,7 @@ import Ammo from "ammojs-typed";
 import * as Colyseus from "colyseus.js";
 import { AdvancedDynamicTexture, TextBlock, Button } from "@babylonjs/gui";
 import RecordRTC, { MediaStreamRecorder } from "recordrtc";
+import { toast } from "react-toastify";
 
 interface MessageType {
   role: "user" | "assistant";
@@ -94,6 +95,7 @@ const AvatarSceneContent: React.FC = () => {
   const [recordingStatus, setRecordingStatus] = useState<string>("");
 
   const [isLoading, setIsLoading] = useState(false);
+  const [streamError, setStreamError] = useState<string | null>(null);
 
   const initializeThread = useCallback(async () => {
     try {
@@ -531,6 +533,7 @@ const AvatarSceneContent: React.FC = () => {
     try {
       setInputDisabled(true);
       setIsLoading(true);
+      setStreamError(null);
 
       const formData = new FormData();
       if (audio) {
@@ -551,12 +554,32 @@ const AvatarSceneContent: React.FC = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      if (response.body !== null) {
-        const stream = AssistantStream.fromReadableStream(response.body);
-        await handleStream(stream);
+      if (response.body) {
+        const reader = response.body.getReader();
+        const stream = new ReadableStream({
+          start(controller) {
+            return pump();
+            async function pump(): Promise<void> {
+              return reader.read().then(({ done, value }) => {
+                if (done) {
+                  controller.close();
+                  return;
+                }
+                controller.enqueue(value);
+                return pump();
+              });
+            }
+          },
+        });
+        const assistantStream = AssistantStream.fromReadableStream(stream);
+        await handleStream(assistantStream);
+      } else {
+        throw new Error("Response body is null");
       }
     } catch (error) {
       console.error("Failed to send message:", error);
+      setStreamError(error instanceof Error ? error.message : String(error));
+      toast.error("Failed to send message. Please try again.");
     } finally {
       setInputDisabled(false);
       setIsLoading(false);
@@ -566,9 +589,20 @@ const AvatarSceneContent: React.FC = () => {
   const handleStream = (stream: AssistantStream): Promise<void> => {
     return new Promise((resolve, reject) => {
       let assistantResponse = "";
-      const timeout = setTimeout(() => {
-        reject(new Error("Stream timeout"));
-      }, 30000);
+      const timeoutDuration = 30000; // 30 seconds timeout
+      const controller = new AbortController();
+      let timeoutId: NodeJS.Timeout;
+
+      const resetTimeout = () => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+          controller.abort();
+          reject(new Error("Stream timeout"));
+        }, timeoutDuration);
+      };
+
+      // Initial timeout set
+      resetTimeout();
 
       stream.on("textCreated", (): void => {
         setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
@@ -586,11 +620,13 @@ const AvatarSceneContent: React.FC = () => {
             return newMessages;
           });
         }
+        // Reset the timeout on each delta received
+        resetTimeout();
       });
 
       stream.on("event", (event: { event: string }): void => {
         if (event.event === "thread.run.completed") {
-          clearTimeout(timeout);
+          clearTimeout(timeoutId);
           setInputDisabled(false);
           setIsLoading(false);
           resolve();
@@ -598,9 +634,25 @@ const AvatarSceneContent: React.FC = () => {
       });
 
       stream.on("error", (error: Error) => {
-        clearTimeout(timeout);
+        clearTimeout(timeoutId);
+        console.error("Stream error:", error);
+        setStreamError(error.message);
         reject(error);
       });
+
+      // Add a 'done' event handler
+      stream.on("end", () => {
+        clearTimeout(timeoutId);
+        setInputDisabled(false);
+        setIsLoading(false);
+        resolve();
+      });
+
+      // Cleanup function
+      return () => {
+        clearTimeout(timeoutId);
+        controller.abort();
+      };
     });
   };
 
@@ -876,6 +928,11 @@ const AvatarSceneContent: React.FC = () => {
             </button>
           </div>
         </div>
+        {streamError && (
+          <div className="p-2 bg-red-100 text-red-800 text-sm">
+            Error: {streamError}
+          </div>
+        )}
       </div>
     </div>
   );

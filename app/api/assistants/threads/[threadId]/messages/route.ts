@@ -14,6 +14,20 @@ function log(
   console[level](`[${timestamp}] [${level.toUpperCase()}] ${message}`, ...args);
 }
 
+async function waitForRunCompletion(threadId: string, runId: string) {
+  while (true) {
+    const run = await openai.beta.threads.runs.retrieve(threadId, runId);
+    if (
+      run.status === "completed" ||
+      run.status === "failed" ||
+      run.status === "cancelled"
+    ) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait for 1 second before checking again
+  }
+}
+
 export async function POST(
   request: NextRequest,
   { params: { threadId } }: { params: { threadId: string } },
@@ -35,6 +49,7 @@ export async function POST(
     } else {
       // Handle text input
       content = formData.get("content") as string;
+      console.log("content", content);
       if (!content) {
         log("warn", `No content provided for thread ${threadId}`);
         return new Response(JSON.stringify({ error: "No content provided" }), {
@@ -42,6 +57,18 @@ export async function POST(
           headers: { "Content-Type": "application/json" },
         });
       }
+    }
+
+    // Check for active runs
+    const runs = await openai.beta.threads.runs.list(threadId);
+    const activeRun = runs.data.find((run) => run.status === "in_progress");
+
+    if (activeRun) {
+      log(
+        "info",
+        `Waiting for active run ${activeRun.id} to complete for thread ${threadId}`,
+      );
+      await waitForRunCompletion(threadId, activeRun.id);
     }
 
     log("info", `Creating message for thread ${threadId}`);
@@ -55,7 +82,13 @@ export async function POST(
       assistant_id: assistantId,
     });
 
-    return new Response(stream.toReadableStream());
+    return new Response(stream.toReadableStream(), {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
   } catch (error) {
     log(
       "error",
