@@ -231,8 +231,6 @@ const AvatarSceneContent: React.FC = () => {
       // Load environment
       SceneLoader.ImportMeshAsync("", "/", "classroom.glb", scene).then(
         (result) => {
-          console.log(result.meshes);
-
           const classroomRoot = result.meshes[0];
           classroomRoot.scaling = new Vector3(3, 3, 3);
 
