@@ -650,32 +650,21 @@ const AvatarSceneContent: React.FC = () => {
     }
   }, [messages]);
 
+  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
+
   const startRecording = async () => {
     try {
-      let stream: MediaStream;
-
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      } else if (navigator.msGetUserMedia) {
-        // Fallback for older browsers
-        stream = await new Promise((resolve, reject) => {
-          navigator.msGetUserMedia({ audio: true }, resolve, reject);
-        });
-      } else {
-        throw new Error("getUserMedia is not supported in this browser");
-      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setMediaStream(stream);
 
       recorderRef.current = new RecordRTC(stream, {
         type: "audio",
-        mimeType: "audio/webm",
-        sampleRate: 44100,
-        desiredSampRate: 16000,
-        recorderType: RecordRTC.StereoAudioRecorder,
-        numberOfAudioChannels: 1,
+        // ... other options
       });
 
       recorderRef.current.startRecording();
       setIsRecording(true);
+      setRecordingStatus("Recording...");
     } catch (error) {
       console.error("Error starting recording:", error);
       setRecordingStatus("Error starting recording");
@@ -689,13 +678,12 @@ const AvatarSceneContent: React.FC = () => {
         setAudioBlob(blob || null);
         setIsRecording(false);
 
-        const internalRecorder = recorderRef.current?.getInternalRecorder();
-        if (
-          internalRecorder instanceof MediaStreamRecorder &&
-          internalRecorder.stream
-        ) {
-          internalRecorder.stream.getTracks().forEach((track) => track.stop());
+        // Stop all tracks of the stored MediaStream
+        if (mediaStream instanceof MediaStream) {
+          mediaStream.getTracks().forEach((track) => track.stop());
         }
+        setMediaStream(null);
+        setRecordingStatus("Recording stopped");
       });
     }
   };
