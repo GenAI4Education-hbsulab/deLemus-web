@@ -1,5 +1,4 @@
 "use client";
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { AssistantStream } from "openai/lib/AssistantStream";
@@ -20,9 +19,7 @@ import {
   AmmoJSPlugin,
   Matrix,
   DynamicTexture,
-  Ray,
   Mesh,
-  Material,
   WebXRDefaultExperience,
 } from "@babylonjs/core";
 import "@babylonjs/loaders";
@@ -30,11 +27,16 @@ import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { atomDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
-import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
+import {
+  FaGraduationCap,
+  FaChalkboardTeacher,
+  FaMicrophone,
+  FaMicrophoneSlash,
+} from "react-icons/fa";
 import Ammo from "ammojs-typed";
-import * as Colyseus from "colyseus.js"
-import { Staatliches } from "next/font/google";
+import * as Colyseus from "colyseus.js";
 import { AdvancedDynamicTexture, TextBlock, Button } from "@babylonjs/gui";
+import RecordRTC, { MediaStreamRecorder } from "recordrtc";
 
 interface MessageType {
   role: "user" | "assistant";
@@ -50,11 +52,16 @@ interface CodeProps {
 
 const MAX_TOKENS = 4000;
 
-function createPlayerAvatar(scene: Scene, id: string, position: Vector3, rotation: Vector3) {
+function createPlayerAvatar(
+  scene: Scene,
+  id: string,
+  position: Vector3,
+  rotation: Vector3,
+) {
   const avatar = MeshBuilder.CreateBox(
     `player_${id}`,
     { height: 1, width: 1, depth: 1 },
-    scene
+    scene,
   );
 
   avatar.position = position || new Vector3(0, 5, 0);
@@ -64,29 +71,10 @@ function createPlayerAvatar(scene: Scene, id: string, position: Vector3, rotatio
     avatar,
     PhysicsImpostor.BoxImpostor,
     { mass: 0, friction: 0.5, restitution: 0.3 },
-    scene
+    scene,
   );
 
   return avatar;
-}
-
-function createWall(scene: Scene, width: number, height: number, position: Vector3, rotation: Vector3, material: Material) {
-  const wall = MeshBuilder.CreateBox(
-    "wall",
-    { width: width, height: height, depth: 1 }, // Set depth to a small value for a thin wall
-    scene
-  );
-  wall.position = position;
-  wall.rotation = rotation;
-  wall.material = material;
-
-  // Apply physics to the wall if needed
-  wall.physicsImpostor = new PhysicsImpostor(
-    wall,
-    PhysicsImpostor.BoxImpostor,
-    { mass: 0, restitution: 0.9 },
-    scene
-  );
 }
 
 const AvatarSceneContent: React.FC = () => {
@@ -99,6 +87,13 @@ const AvatarSceneContent: React.FC = () => {
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   let room: Colyseus.Room;
   let playerMesh: { [key: string]: Mesh } = {};
+
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const recorderRef = useRef<RecordRTC | null>(null);
+  const [recordingStatus, setRecordingStatus] = useState<string>("");
+
+  const [isLoading, setIsLoading] = useState(false);
 
   const initializeThread = useCallback(async () => {
     try {
@@ -114,6 +109,12 @@ const AvatarSceneContent: React.FC = () => {
     void initializeThread();
   }, [initializeThread]);
 
+  const startNewChat = useCallback(async () => {
+    setMessages([]);
+    setInputDisabled(false);
+    setTokenCount(0);
+    await initializeThread();
+  }, [initializeThread]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -128,7 +129,7 @@ const AvatarSceneContent: React.FC = () => {
       );
 
       // Server
-      const client = new Colyseus.Client("http://localhost:2567");
+      const client = new Colyseus.Client("http://219.77.74.96:2567");
       client
         .joinOrCreate("my_room")
         .then((roomInstance: Colyseus.Room) => {
@@ -141,20 +142,27 @@ const AvatarSceneContent: React.FC = () => {
             console.log(`pos: ${player.posX} ${player.posY} ${player.posZ}`);
             console.log(room.state);
 
-            let isCurPlayer = room.sessionId === key
+            let isCurPlayer = room.sessionId === key;
 
-            if (!isCurPlayer) playerMesh[key] = createPlayerAvatar(
-              scene,
-              player.id,
-              new Vector3(player.posX, player.posY, player.posZ),
-              new Vector3(player.rotX, player.rotY, player.rotZ)
-            );
-            console.log(playerMesh);
-
+            if (!isCurPlayer)
+              playerMesh[key] = createPlayerAvatar(
+                scene,
+                player.id,
+                new Vector3(player.posX, player.posY, player.posZ),
+                new Vector3(player.rotX, player.rotY, player.rotZ),
+              );
             player.onChange(() => {
               if (room.sessionId != key) {
-                playerMesh[key].position.set(player.posX, player.posY, player.posZ);
-                playerMesh[key].rotation.set(player.rotX, player.rotY, player.rotZ)
+                playerMesh[key].position.set(
+                  player.posX,
+                  player.posY,
+                  player.posZ,
+                );
+                playerMesh[key].rotation.set(
+                  player.rotX,
+                  player.rotY,
+                  player.rotZ,
+                );
               }
             });
           });
@@ -166,34 +174,44 @@ const AvatarSceneContent: React.FC = () => {
               delete playerMesh[key];
             }
           });
-
         })
         .catch(function (error) {
           console.log("Couldn't connect.", error);
         });
 
       // Lighting
-      const hemisphericLight = new HemisphericLight("light", new Vector3(0, 1, 0), scene);
+      const hemisphericLight = new HemisphericLight(
+        "light",
+        new Vector3(0, 1, 0),
+        scene,
+      );
       hemisphericLight.intensity = 0.7;
 
-      const pointLight = new PointLight("pointLight", new Vector3(0, 5, -5), scene);
+      const pointLight = new PointLight(
+        "pointLight",
+        new Vector3(0, 5, -5),
+        scene,
+      );
       pointLight.intensity = 0.5;
 
-      const transparentMaterial = new StandardMaterial("transparentMaterial", scene);
+      const transparentMaterial = new StandardMaterial(
+        "transparentMaterial",
+        scene,
+      );
       transparentMaterial.alpha = 0;
 
       // Create invisible ground for physics
       const invisibleGround = MeshBuilder.CreateGround(
         "invisibleGround",
         { width: 40, height: 50 },
-        scene
+        scene,
       );
       invisibleGround.visibility = 0; // Make it invisible
       invisibleGround.physicsImpostor = new PhysicsImpostor(
         invisibleGround,
         PhysicsImpostor.BoxImpostor,
         { mass: 0, restitution: 0.9 },
-        scene
+        scene,
       );
 
       const step = MeshBuilder.CreateBox(
@@ -210,11 +228,6 @@ const AvatarSceneContent: React.FC = () => {
         scene,
       );
 
-      // createWall(scene, 40, 20, new Vector3(0, 10, -22), Vector3.Zero(), transparentMaterial);
-      // createWall(scene, 50, 20, new Vector3(-17, 10, 0), new Vector3(0, Math.PI / 2), transparentMaterial);
-      // createWall(scene, 50, 20, new Vector3(13, 10, 0), new Vector3(0, Math.PI / 2), transparentMaterial);
-      // createWall(scene, 40, 20, new Vector3(0, 10, 24), Vector3.Zero(), transparentMaterial);
-
       // Load environment
       SceneLoader.ImportMeshAsync("", "/", "classroom.glb", scene).then(
         (result) => {
@@ -222,7 +235,7 @@ const AvatarSceneContent: React.FC = () => {
 
           const classroomRoot = result.meshes[0];
           classroomRoot.scaling = new Vector3(3, 3, 3);
-          
+
           // Ensure materials are properly applied
           result.meshes.forEach((mesh) => {
             if (mesh.material) {
@@ -516,16 +529,25 @@ const AvatarSceneContent: React.FC = () => {
     });
   }, []);
 
-  const sendMessage = async (text: string, retryCount = 0): Promise<void> => {
+  const sendMessage = async (text: string, audio?: Blob): Promise<void> => {
     try {
       setInputDisabled(true);
-      setTokenCount(0);
+      setIsLoading(true);
+
+      let body;
+      if (audio) {
+        const formData = new FormData();
+        formData.append("audio", audio, "audio.wav");
+        body = formData;
+      } else {
+        body = JSON.stringify({ content: text, max_tokens: MAX_TOKENS });
+      }
 
       const response = await fetch(
         `/api/assistants/threads/${threadId}/messages`,
         {
           method: "POST",
-          body: JSON.stringify({ content: text, max_tokens: MAX_TOKENS }),
+          body: body,
         },
       );
 
@@ -539,7 +561,9 @@ const AvatarSceneContent: React.FC = () => {
       }
     } catch (error) {
       console.error("Failed to send message:", error);
+    } finally {
       setInputDisabled(false);
+      setIsLoading(false);
     }
   };
 
@@ -572,6 +596,7 @@ const AvatarSceneContent: React.FC = () => {
         if (event.event === "thread.run.completed") {
           clearTimeout(timeout);
           setInputDisabled(false);
+          setIsLoading(false);
           resolve();
         }
       });
@@ -588,13 +613,21 @@ const AvatarSceneContent: React.FC = () => {
   };
 
   const handleUserInput = useCallback(async (): Promise<void> => {
-    if (userInput.trim() !== "") {
-      setMessages((prev) => [...prev, { role: "user", content: userInput }]);
+    if (userInput.trim() !== "" || audioBlob) {
+      if (audioBlob) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "user", content: "Audio message" },
+        ]);
+        await sendMessage("", audioBlob);
+        setAudioBlob(null);
+      } else {
+        setMessages((prev) => [...prev, { role: "user", content: userInput }]);
+        await sendMessage(userInput);
+      }
       setUserInput("");
-      setInputDisabled(true);
-      await sendMessage(userInput);
     }
-  }, [userInput, sendMessage]);
+  }, [userInput, audioBlob, sendMessage]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -617,23 +650,85 @@ const AvatarSceneContent: React.FC = () => {
     }
   }, [messages]);
 
+  const startRecording = async () => {
+    try {
+      let stream: MediaStream;
+
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } else if (navigator.msGetUserMedia) {
+        // Fallback for older browsers
+        stream = await new Promise((resolve, reject) => {
+          navigator.msGetUserMedia({ audio: true }, resolve, reject);
+        });
+      } else {
+        throw new Error("getUserMedia is not supported in this browser");
+      }
+
+      recorderRef.current = new RecordRTC(stream, {
+        type: "audio",
+        mimeType: "audio/webm",
+        sampleRate: 44100,
+        desiredSampRate: 16000,
+        recorderType: RecordRTC.StereoAudioRecorder,
+        numberOfAudioChannels: 1,
+      });
+
+      recorderRef.current.startRecording();
+      setIsRecording(true);
+    } catch (error) {
+      console.error("Error starting recording:", error);
+      setRecordingStatus("Error starting recording");
+    }
+  };
+
+  const stopRecording = () => {
+    if (recorderRef.current) {
+      recorderRef.current.stopRecording(() => {
+        const blob = recorderRef.current?.getBlob();
+        setAudioBlob(blob || null);
+        setIsRecording(false);
+
+        const internalRecorder = recorderRef.current?.getInternalRecorder();
+        if (
+          internalRecorder instanceof MediaStreamRecorder &&
+          internalRecorder.stream
+        ) {
+          internalRecorder.stream.getTracks().forEach((track) => track.stop());
+        }
+      });
+    }
+  };
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
+
   const renderMessage = (msg: MessageType, id: number): JSX.Element => (
     <div
       key={id}
-      className={`mb-4 p-3 rounded-lg ${msg.role === "user" ? "bg-blue-100" : "bg-green-100"} max-w-full break-words`}
+      className={`mb-2 p-3 rounded-lg ${
+        msg.role === "user"
+          ? "bg-blue-50 border-blue-200"
+          : "bg-green-50 border-green-200"
+      } border max-w-full break-words shadow-sm`}
     >
-      <div className="flex items-center mb-2">
+      <div className="flex items-center mb-1">
         {msg.role === "user" ? (
-          <FaGraduationCap className="mr-2" />
+          <FaGraduationCap className="mr-2 text-blue-500" />
         ) : (
-          <FaChalkboardTeacher className="mr-2" />
+          <FaChalkboardTeacher className="mr-2 text-green-500" />
         )}
-        <strong className="font-bold">
-          {msg.role === "user" ? "Student" : "Teacher"}:
+        <strong className="font-semibold text-sm text-gray-700">
+          {msg.role === "user" ? "Student" : "Teacher"}
         </strong>
       </div>
       <ReactMarkdown
-        className="mt-2"
+        className="mt-1 text-sm text-gray-800"
         components={{
           code({ node, inline, className, children, ...props }: CodeProps) {
             const match = /language-(\w+)/.exec(className ?? "");
@@ -648,7 +743,7 @@ const AvatarSceneContent: React.FC = () => {
               </SyntaxHighlighter>
             ) : (
               <code
-                className={`${className} bg-gray-100 rounded px-1`}
+                className={`${className} bg-gray-100 rounded px-1 py-0.5 text-sm`}
                 {...props}
               >
                 {children}
@@ -659,23 +754,23 @@ const AvatarSceneContent: React.FC = () => {
             <p className="mb-2 max-w-full break-words">{children}</p>
           ),
           h1: ({ children }) => (
-            <h1 className="text-2xl font-bold mb-2">{children}</h1>
+            <h1 className="text-xl font-bold mb-2">{children}</h1>
           ),
           h2: ({ children }) => (
-            <h2 className="text-xl font-bold mb-2">{children}</h2>
+            <h2 className="text-lg font-bold mb-2">{children}</h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-lg font-semibold mb-2">{children}</h3>
+            <h3 className="text-base font-semibold mb-2">{children}</h3>
           ),
           ul: ({ children }) => (
-            <ul className="list-disc pl-5 mb-2">{children}</ul>
+            <ul className="list-disc pl-4 mb-2">{children}</ul>
           ),
           ol: ({ children }) => (
-            <ol className="list-decimal pl-5 mb-2">{children}</ol>
+            <ol className="list-decimal pl-4 mb-2">{children}</ol>
           ),
           li: ({ children }) => <li className="mb-1">{children}</li>,
           blockquote: ({ children }) => (
-            <blockquote className="border-l-4 border-gray-400 pl-4 italic my-2">
+            <blockquote className="border-l-4 border-gray-300 pl-3 italic my-2 text-gray-600">
               {children}
             </blockquote>
           ),
@@ -698,18 +793,18 @@ const AvatarSceneContent: React.FC = () => {
           ),
           table: ({ children }) => (
             <div className="overflow-x-auto">
-              <table className="table-auto border-collapse border border-gray-300 my-2">
+              <table className="table-auto border-collapse border border-gray-300 my-2 text-sm">
                 {children}
               </table>
             </div>
           ),
           th: ({ children }) => (
-            <th className="border border-gray-300 px-4 py-2 bg-gray-100">
+            <th className="border border-gray-300 px-3 py-1 bg-gray-100">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="border border-gray-300 px-4 py-2">{children}</td>
+            <td className="border border-gray-300 px-3 py-1">{children}</td>
           ),
         }}
         remarkPlugins={[remarkGfm]}
@@ -718,7 +813,7 @@ const AvatarSceneContent: React.FC = () => {
       </ReactMarkdown>
     </div>
   );
-
+  console.log("inputDisabled", inputDisabled);
   return (
     <div className="flex w-full h-[90vh]">
       <canvas
@@ -727,10 +822,26 @@ const AvatarSceneContent: React.FC = () => {
         tabIndex={1}
         onFocus={(e) => (e.currentTarget.style.outline = "none")}
       />
-      <div className="w-[30%] h-full flex flex-col p-4 bg-gray-100">
+      <div className="w-[30%] h-full flex flex-col bg-gray-50 border-l border-gray-200">
+        <div className="p-2 bg-yellow-100 text-yellow-800 text-sm">
+          Recording Status: {recordingStatus}
+        </div>
+        <div className="p-4 bg-white border-b border-gray-200 flex justify-between items-center">
+          <h2 className="text-xl font-semibold text-gray-800">
+            Virtual Classroom Chat
+          </h2>
+          <button
+            onClick={() => void startNewChat()}
+            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          >
+            New Chat
+          </button>
+        </div>
         {messages.length === 0 && (
-          <div className="mb-4 p-3 bg-yellow-100 rounded-lg">
-            <p className="font-bold">Welcome to the Virtual Classroom!</p>
+          <div className="m-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+            <p className="font-semibold mb-1">
+              Welcome to the Virtual Classroom!
+            </p>
             <p>
               Feel free to ask the teacher any questions about your studies. I
               am here to help!
@@ -739,33 +850,43 @@ const AvatarSceneContent: React.FC = () => {
         )}
         <div
           ref={chatContainerRef}
-          className="flex-1 overflow-y-auto mb-4 max-h-[calc(90vh-100px)]"
+          className="flex-1 overflow-y-auto p-4 space-y-2"
         >
           {messages.map(renderMessage)}
         </div>
-        <div className="flex flex-col">
-          <div className="text-sm text-gray-500 mb-2">
+        <div className="p-4 bg-white border-t border-gray-200">
+          <div className="text-xs text-gray-500 mb-2">
             Tokens: {tokenCount} / {MAX_TOKENS}
           </div>
-          <div className="flex">
+          <div className="flex items-center">
             <input
               type="text"
               value={userInput}
-              onChange={(e) => {
-                setUserInput(e.target.value);
-              }}
+              onChange={(e) => setUserInput(e.target.value)}
               placeholder="Ask the teacher a question..."
               disabled={inputDisabled}
-              className="flex-1 p-2 mr-2 border rounded"
+              className="flex-1 p-2 mr-2 border border-gray-300 rounded-l focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
-              onClick={() => {
-                void handleUserInput();
-              }}
-              disabled={inputDisabled || tokenCount >= MAX_TOKENS}
-              className="px-4 py-2 bg-green-500 text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
+              onClick={toggleRecording}
+              className={`p-2 mr-2 rounded-full ${
+                isRecording
+                  ? "bg-red-500 text-white"
+                  : "bg-gray-200 text-gray-600"
+              }`}
             >
-              Send
+              {isRecording ? <FaMicrophoneSlash /> : <FaMicrophone />}
+            </button>
+            <button
+              onClick={() => void handleUserInput()}
+              disabled={
+                inputDisabled ||
+                (!userInput.trim() && !audioBlob) ||
+                tokenCount >= MAX_TOKENS
+              }
+              className="px-4 py-2 bg-blue-500 text-white rounded-r hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            >
+              {isLoading ? "Sending..." : "Send"}
             </button>
           </div>
         </div>
