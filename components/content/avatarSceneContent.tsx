@@ -534,20 +534,18 @@ const AvatarSceneContent: React.FC = () => {
       setInputDisabled(true);
       setIsLoading(true);
 
-      let body;
+      const formData = new FormData();
       if (audio) {
-        const formData = new FormData();
-        formData.append("audio", audio, "audio.wav");
-        body = formData;
+        formData.append("audio", audio, "audio.webm");
       } else {
-        body = JSON.stringify({ content: text, max_tokens: MAX_TOKENS });
+        formData.append("content", text);
       }
 
       const response = await fetch(
         `/api/assistants/threads/${threadId}/messages`,
         {
           method: "POST",
-          body: body,
+          body: formData,
         },
       );
 
@@ -659,7 +657,9 @@ const AvatarSceneContent: React.FC = () => {
 
       recorderRef.current = new RecordRTC(stream, {
         type: "audio",
-        // ... other options
+        mimeType: "audio/webm",
+        recorderType: RecordRTC.StereoAudioRecorder,
+        numberOfAudioChannels: 1,
       });
 
       recorderRef.current.startRecording();
@@ -677,6 +677,7 @@ const AvatarSceneContent: React.FC = () => {
         const blob = recorderRef.current?.getBlob();
         setAudioBlob(blob || null);
         setIsRecording(false);
+        setRecordingStatus("Recording stopped");
 
         // Stop all tracks of the stored MediaStream
         if (mediaStream instanceof MediaStream) {
@@ -801,7 +802,6 @@ const AvatarSceneContent: React.FC = () => {
       </ReactMarkdown>
     </div>
   );
-  console.log("inputDisabled", inputDisabled);
   return (
     <div className="flex w-full h-[90vh]">
       <canvas

@@ -4,9 +4,25 @@ import { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
 
-// Send a new message to a thread
-export async function POST(request: NextRequest, { params: { threadId } }: { params: { threadId: string } }) {
-  const { content } = await request.json();
+export async function POST(
+  request: NextRequest,
+  { params: { threadId } }: { params: { threadId: string } },
+) {
+  const formData = await request.formData();
+  const audioFile = formData.get("audio") as File | null;
+  let content: string;
+
+  if (audioFile) {
+    // Convert audio to text using OpenAI's Whisper API
+    const transcription = await openai.audio.transcriptions.create({
+      file: audioFile,
+      model: "whisper-1",
+    });
+    content = transcription.text;
+  } else {
+    // Handle text input
+    content = formData.get("content") as string;
+  }
 
   await openai.beta.threads.messages.create(threadId, {
     role: "user",
