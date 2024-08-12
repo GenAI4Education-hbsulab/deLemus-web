@@ -53,12 +53,38 @@ interface CodeProps {
 
 const MAX_TOKENS = 4000;
 
+function generateRandomName(): string {
+  const names = [
+    "Alex",
+    "Blake",
+    "Casey",
+    "Dana",
+    "Ellis",
+    "Frankie",
+    "Glenn",
+    "Harper",
+    "Indigo",
+    "Jordan",
+    "Kelly",
+    "Logan",
+    "Morgan",
+    "Noel",
+    "Parker",
+    "Quinn",
+    "Riley",
+    "Sage",
+    "Taylor",
+    "Val",
+  ];
+  return names[Math.floor(Math.random() * names.length)];
+}
+
 function createPlayerAvatar(
   scene: Scene,
   id: string,
   position: Vector3,
   rotation: Vector3,
-) {
+): { mesh: Mesh; name: string } {
   const avatar = MeshBuilder.CreateBox(
     `player_${id}`,
     { height: 1, width: 1, depth: 1 },
@@ -75,7 +101,33 @@ function createPlayerAvatar(
     scene,
   );
 
-  return avatar;
+  const playerName = generateRandomName();
+
+  const namePlane = MeshBuilder.CreatePlane(
+    "namePlane",
+    { width: 2, height: 1 },
+    scene,
+  );
+  namePlane.parent = avatar;
+  namePlane.position.y = 0.8;
+  namePlane.rotation.x = Math.PI / 2; // Rotate 90 degrees around X-axis to make it horizontal
+
+  const nameTexture = AdvancedDynamicTexture.CreateForMesh(namePlane);
+  const nameText = new TextBlock();
+  nameText.text = playerName;
+  nameText.color = "blue";
+  nameText.fontSize = 304;
+  nameText.rotation = Math.PI; // Rotate the text 180 degrees to correct its orientation
+  nameTexture.addControl(nameText);
+
+  scene.onBeforeRenderObservable.add(() => {
+    const camera = scene.activeCamera;
+    if (camera) {
+      namePlane.lookAt(camera.position);
+    }
+  });
+
+  return { mesh: avatar, name: playerName };
 }
 
 const AvatarSceneContent: React.FC = () => {
@@ -87,7 +139,7 @@ const AvatarSceneContent: React.FC = () => {
   const [tokenCount, setTokenCount] = useState<number>(0);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   let room: Colyseus.Room;
-  let playerMesh: { [key: string]: Mesh } = {};
+  let playerMesh: { [key: string]: { mesh: Mesh; name: string } } = {};
 
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -138,7 +190,6 @@ const AvatarSceneContent: React.FC = () => {
           room = roomInstance;
           console.log("Connected to roomId: " + room.roomId);
 
-          // console.log("Initial players:");
           room.state.players.onAdd((player: any, key: string) => {
             console.log(player.id, "has been added");
             console.log(`pos: ${player.posX} ${player.posY} ${player.posZ}`);
@@ -146,21 +197,23 @@ const AvatarSceneContent: React.FC = () => {
 
             let isCurPlayer = room.sessionId === key;
 
-            if (!isCurPlayer)
-              playerMesh[key] = createPlayerAvatar(
+            if (!isCurPlayer) {
+              const { mesh, name } = createPlayerAvatar(
                 scene,
                 player.id,
                 new Vector3(player.posX, player.posY, player.posZ),
                 new Vector3(player.rotX, player.rotY, player.rotZ),
               );
+              playerMesh[key] = { mesh, name };
+            }
             player.onChange(() => {
               if (room.sessionId != key) {
-                playerMesh[key].position.set(
+                playerMesh[key].mesh.position.set(
                   player.posX,
                   player.posY,
                   player.posZ,
                 );
-                playerMesh[key].rotation.set(
+                playerMesh[key].mesh.rotation.set(
                   player.rotX,
                   player.rotY,
                   player.rotZ,
@@ -172,7 +225,7 @@ const AvatarSceneContent: React.FC = () => {
           room.state.players.onRemove((player: any, key: string) => {
             console.log(player.id, "has been removed");
             if (playerMesh[key]) {
-              playerMesh[key].dispose();
+              playerMesh[key].mesh.dispose();
               delete playerMesh[key];
             }
           });
