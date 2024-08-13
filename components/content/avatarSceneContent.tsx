@@ -136,7 +136,6 @@ const AvatarSceneContent: React.FC = () => {
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [threadId, setThreadId] = useState<string>("");
   const [inputDisabled, setInputDisabled] = useState<boolean>(false);
-  const [tokenCount, setTokenCount] = useState<number>(0);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   let room: Colyseus.Room;
   let playerMesh: { [key: string]: { mesh: Mesh; name: string } } = {};
@@ -148,6 +147,10 @@ const AvatarSceneContent: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
+
+  const [isSpeechEnabled, setIsSpeechEnabled] = useState<boolean>(false);
+  const [selectedVoice, setSelectedVoice] =
+    useState<SpeechSynthesisVoice | null>(null);
 
   const initializeThread = useCallback(async () => {
     try {
@@ -163,12 +166,16 @@ const AvatarSceneContent: React.FC = () => {
     void initializeThread();
   }, [initializeThread]);
 
+  const stopSpeech = useCallback(() => {
+    window.speechSynthesis.cancel();
+  }, []);
+
   const startNewChat = useCallback(async () => {
+    stopSpeech();
     setMessages([]);
     setInputDisabled(false);
-    setTokenCount(0);
     await initializeThread();
-  }, [initializeThread]);
+  }, [stopSpeech, initializeThread]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -664,14 +671,12 @@ const AvatarSceneContent: React.FC = () => {
       stream.on("textDelta", (delta: { value?: string }): void => {
         if (delta.value != null) {
           assistantResponse += delta.value;
-          setTokenCount(
-            (prevCount) => prevCount + estimateTokens(delta.value!),
-          );
           setMessages((prev) => {
             const newMessages = [...prev];
             newMessages[newMessages.length - 1].content = assistantResponse;
             return newMessages;
           });
+          speakMessage(delta.value);
         }
         // Reset the timeout on each delta received
         resetTimeout();
@@ -707,10 +712,6 @@ const AvatarSceneContent: React.FC = () => {
         controller.abort();
       };
     });
-  };
-
-  const estimateTokens = (text: string): number => {
-    return Math.ceil(text.split(/\s+/).length * 1.3);
   };
 
   const handleUserInput = useCallback(async (): Promise<void> => {
@@ -905,6 +906,88 @@ const AvatarSceneContent: React.FC = () => {
       </ReactMarkdown>
     </div>
   );
+
+  const speakMessage = useCallback(
+    (text: string) => {
+      if (!isSpeechEnabled || !selectedVoice) return;
+
+      // Clean the text: remove punctuation and extra spaces
+      const cleanedText = text
+        .trim()
+        .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "")
+        .replace(/\s+/g, " ");
+
+      // Split the cleaned text into smaller chunks
+      const words = cleanedText.split(" ");
+      const chunks = [];
+      let currentChunk = "";
+
+      for (const word of words) {
+        if ((currentChunk + " " + word).length <= 100) {
+          currentChunk += (currentChunk ? " " : "") + word;
+        } else {
+          chunks.push(currentChunk);
+          currentChunk = word;
+        }
+      }
+      if (currentChunk) {
+        chunks.push(currentChunk);
+      }
+
+      chunks.forEach((chunk, index) => {
+        const utterance = new SpeechSynthesisUtterance(chunk);
+        utterance.voice = selectedVoice;
+        utterance.lang = "en-US";
+        utterance.rate = 1.3; // Slightly faster than normal
+        utterance.pitch = 1.1; // Normal pitch
+
+        // Reduce pauses between chunks
+        if (index < chunks.length - 1) {
+          utterance.onend = () => {
+            window.speechSynthesis.resume();
+          };
+        }
+
+        window.speechSynthesis.speak(utterance);
+      });
+    },
+    [isSpeechEnabled, selectedVoice],
+  );
+
+  const toggleSpeech = useCallback(() => {
+    setIsSpeechEnabled((prev) => {
+      if (prev) {
+        stopSpeech();
+      }
+      return !prev;
+    });
+  }, [stopSpeech]);
+
+  const VoiceSelector = () => {
+    const voices = window.speechSynthesis
+      .getVoices()
+      .filter((voice) => voice.lang.startsWith("en"));
+
+    return (
+      <select
+        value={selectedVoice?.name}
+        onChange={(e) => {
+          const newVoice = voices.find(
+            (voice) => voice.name === e.target.value,
+          );
+          if (newVoice) setSelectedVoice(newVoice);
+        }}
+        className="ml-2 p-1 border rounded text-sm"
+      >
+        {voices.map((voice) => (
+          <option key={voice.name} value={voice.name}>
+            {voice.name.split(" ")[0]}
+          </option>
+        ))}
+      </select>
+    );
+  };
+
   return (
     <div className="flex w-full h-[90vh]">
       <canvas
@@ -946,8 +1029,18 @@ const AvatarSceneContent: React.FC = () => {
           {messages.map(renderMessage)}
         </div>
         <div className="p-4 bg-white border-t border-gray-200">
-          <div className="text-xs text-gray-500 mb-2">
-            Tokens: {tokenCount} / {MAX_TOKENS}
+          <div className="flex items-center justify-end mb-2">
+            <button
+              onClick={toggleSpeech}
+              className={`px-3 py-1 rounded text-sm ${
+                isSpeechEnabled
+                  ? "bg-green-500 text-white"
+                  : "bg-gray-200 text-gray-600"
+              }`}
+            >
+              {isSpeechEnabled ? "Speech On" : "Speech Off"}
+            </button>
+            {isSpeechEnabled && <VoiceSelector />}
           </div>
           <div className="flex items-center">
             <input
@@ -970,11 +1063,7 @@ const AvatarSceneContent: React.FC = () => {
             </button>
             <button
               onClick={() => void handleUserInput()}
-              disabled={
-                inputDisabled ||
-                (!userInput.trim() && !audioBlob) ||
-                tokenCount >= MAX_TOKENS
-              }
+              disabled={inputDisabled || (!userInput.trim() && !audioBlob)}
               className="px-4 py-2 bg-blue-500 text-white rounded-r hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
               {isLoading ? "Sending..." : "Send"}
