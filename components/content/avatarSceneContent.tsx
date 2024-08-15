@@ -21,6 +21,10 @@ import {
   DynamicTexture,
   Mesh,
   WebXRDefaultExperience,
+  Animation,
+  AnimationGroup,
+  Quaternion,
+  AbstractMesh,
 } from "@babylonjs/core";
 import "@babylonjs/loaders";
 import ReactMarkdown from "react-markdown";
@@ -100,6 +104,23 @@ function createPlayerAvatar(
     { mass: 0, friction: 0.5, restitution: 0.3 },
     scene,
   );
+  avatar.visibility = 0;
+
+  let anim: AnimationGroup | null;
+  let avatarMesh: AbstractMesh | null;
+  SceneLoader.ImportMeshAsync(
+    "",
+    "https://assets.babylonjs.com/meshes/",
+    "HVGirl.glb",
+    scene,
+  ).then((result) => {
+    const hero = result.meshes[0];
+    hero.parent = avatar;
+    hero.scaling.scaleInPlace(0.25);
+    hero.position.y = -0.5;
+    anim = scene.getAnimationGroupByName("Walking");
+    avatarMesh = hero;
+  });
 
   const playerName = generateRandomName();
 
@@ -109,7 +130,7 @@ function createPlayerAvatar(
     scene,
   );
   namePlane.parent = avatar;
-  namePlane.position.y = 0.8;
+  namePlane.position.y = 6.3;
   namePlane.rotation.x = Math.PI / 2; // Rotate 90 degrees around X-axis to make it horizontal
 
   const nameTexture = AdvancedDynamicTexture.CreateForMesh(namePlane);
@@ -125,6 +146,7 @@ function createPlayerAvatar(
     if (camera) {
       namePlane.lookAt(camera.position);
     }
+    console.log(anim);
   });
 
   return { mesh: avatar, name: playerName };
@@ -256,12 +278,6 @@ const AvatarSceneContent: React.FC = () => {
       );
       pointLight.intensity = 0.5;
 
-      const transparentMaterial = new StandardMaterial(
-        "transparentMaterial",
-        scene,
-      );
-      transparentMaterial.alpha = 0;
-
       // Create invisible ground for physics
       const invisibleGround = MeshBuilder.CreateGround(
         "invisibleGround",
@@ -282,7 +298,7 @@ const AvatarSceneContent: React.FC = () => {
         scene,
       );
       step.position = new Vector3(-2, 0, 18.5);
-      step.material = transparentMaterial;
+      step.visibility = 0;
       step.physicsImpostor = new PhysicsImpostor(
         step,
         PhysicsImpostor.BoxImpostor,
@@ -305,12 +321,12 @@ const AvatarSceneContent: React.FC = () => {
           });
 
           // Apply physics to the classroom root
-          classroomRoot.physicsImpostor = new PhysicsImpostor(
-            classroomRoot,
-            PhysicsImpostor.MeshImpostor,
-            { mass: 0, restitution: 0.9 },
-            scene,
-          );
+          // classroomRoot.physicsImpostor = new PhysicsImpostor(
+          //   classroomRoot,
+          //   PhysicsImpostor.MeshImpostor,
+          //   { mass: 0, restitution: 0.9 },
+          //   scene,
+          // );
 
           // Blackboard setup
           const blackboard = classroomRoot
@@ -473,6 +489,21 @@ const AvatarSceneContent: React.FC = () => {
         { mass: 1, friction: 0.5, restitution: 0.3 },
         scene,
       );
+      avatar.visibility = 0;
+
+      let anim: AnimationGroup | null;
+      SceneLoader.ImportMeshAsync(
+        "",
+        "https://assets.babylonjs.com/meshes/",
+        "HVGirl.glb",
+        scene,
+      ).then((result) => {
+        const hero = result.meshes[0];
+        hero.parent = avatar;
+        hero.scaling.scaleInPlace(0.25);
+        hero.position.y = -0.5;
+        anim = scene.getAnimationGroupByName("Walking");
+      });
 
       // Camera setup
       const camera = new UniversalCamera(
@@ -495,9 +526,9 @@ const AvatarSceneContent: React.FC = () => {
             room.send("updatePosition", avatar.position);
             lastSentPos.copyFrom(avatar.position);
           }
-          if (Vector3.Distance(camera.rotation, lastSentRot) >= threshold) {
-            room.send("updateRotation", camera.rotation);
-            lastSentRot.copyFrom(camera.rotation);
+          if (Vector3.Distance(avatar.rotation, lastSentRot) >= threshold) {
+            room.send("updateRotation", avatar.rotation);
+            lastSentRot.copyFrom(avatar.rotation);
           }
         }
       });
@@ -532,6 +563,12 @@ const AvatarSceneContent: React.FC = () => {
             moveDirection,
           );
 
+          if (moveDirection.length() > 0) {
+            anim?.start(true, 1.0, anim.from, anim.to, false);
+          } else {
+            anim?.stop();
+          }
+
           const currentVelocity =
             avatar.physicsImpostor.getLinearVelocity() || Vector3.Zero();
           const targetVelocity = moveDirection.scale(5);
@@ -542,6 +579,10 @@ const AvatarSceneContent: React.FC = () => {
           );
 
           avatar.physicsImpostor.setLinearVelocity(smoothedVelocity);
+          avatar.rotation = Vector3.Zero();
+
+          avatar.physicsImpostor?.setAngularVelocity(Vector3.Zero()); // Set angular velocity to zero
+          avatar.rotation = new Vector3(0, camera.rotation.y, 0);
 
           if (inputMap[" "] && avatar.position.y <= 1.1) {
             avatar.physicsImpostor.applyImpulse(
