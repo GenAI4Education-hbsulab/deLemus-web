@@ -1,6 +1,13 @@
 "use client";
 import React, { ReactNode } from "react";
 import { usePathname } from "next/navigation";
+import {
+  SignInButton,
+  SignUpButton,
+  UserButton,
+  SignedIn,
+  SignedOut,
+} from "@clerk/nextjs";
 
 import Footer from "./_components/footer";
 import NewNavBar from "./_components/newNavbar";
@@ -43,13 +50,14 @@ const LandingPageLayout = ({ children }: { children: ReactNode }) => (
           </div>
         </div>
         <div className="flex items-center space-x-4">
-          <a
-            href="#"
-            className="text-gray-700 border font-semibold rounded px-4 py-2"
-          >
-            Log In
-          </a>
-          <Button>Sign Up</Button>
+          <SignedOut>
+            <SignInButton mode="modal">
+              <Button variant="outline">Log In</Button>
+            </SignInButton>
+          </SignedOut>
+          <SignedIn>
+            <UserButton afterSignOutUrl="/" />
+          </SignedIn>
         </div>
       </div>
       <div className="container mx-auto md:hidden flex justify-between items-center mt-4">

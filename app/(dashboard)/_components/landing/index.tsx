@@ -1,8 +1,23 @@
+"use client";
 import { Button } from "@/components/button";
-import Link from "next/link";
 import React from "react";
+import { useUser } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
+  const { isSignedIn, user } = useUser();
+  const router = useRouter();
+
+  const handleStartLearning = () => {
+    if (isSignedIn) {
+      router.push("/student/dashboard");
+    } else {
+      // You might want to open the sign-in modal here
+      // For now, we'll just redirect to the sign-in page
+      router.push("/sign-in");
+    }
+  };
+
   return (
     <div>
       <section className="hero text-center py-16 bg-blue-100">
@@ -12,11 +27,12 @@ export default function Home() {
         <p className="mb-6 text-xl text-gray-700">
           Discover a variety of advanced courses in biology and chemistry.
         </p>
-        <Link href="/student/dashboard">
-          <Button className="p-8 text-white rounded-lg text-lg font-bold">
-            Start Learning Now
-          </Button>
-        </Link>
+        <Button
+          onClick={handleStartLearning}
+          className="p-8 text-white rounded-lg text-lg font-bold"
+        >
+          {isSignedIn ? "Start Learning Now" : "Log in to Start Learning"}
+        </Button>
       </section>
 
       <section className="statistics grid grid-cols-2 md:grid-cols-4 gap-4 py-8 bg-gray-50">

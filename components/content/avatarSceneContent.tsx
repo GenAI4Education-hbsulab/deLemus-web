@@ -155,7 +155,7 @@ const AvatarSceneContent: React.FC = () => {
   const [selectedVoice, setSelectedVoice] = useState<string>("Monica");
   const [chatHistory, setChatHistory] = useState<MessageType[]>([]);
 
-  const { userId } = useAuth();
+  const { userId, isLoaded, isSignedIn } = useAuth();
 
   const name2config = useCallback((name: string) => {
     const speechKey = process.env.NEXT_PUBLIC_SPEECH_KEY ?? "";
@@ -242,8 +242,10 @@ const AvatarSceneContent: React.FC = () => {
   }, [userId]);
 
   useEffect(() => {
-    fetchChatHistory();
-  }, [fetchChatHistory]);
+    if (isLoaded && isSignedIn) {
+      fetchChatHistory();
+    }
+  }, [isLoaded, isSignedIn, fetchChatHistory]);
 
   const saveMessage = useCallback(
     async (message: MessageType) => {
@@ -1065,6 +1067,10 @@ const AvatarSceneContent: React.FC = () => {
       </select>
     );
   };
+
+  if (!isLoaded || !isSignedIn) {
+    return <div>Loading or not signed in...</div>;
+  }
 
   return (
     <div className="flex w-full h-[90vh]">
