@@ -153,9 +153,10 @@ const AvatarSceneContent: React.FC = () => {
 
   const [isSpeechEnabled, setIsSpeechEnabled] = useState<boolean>(false);
   const [selectedVoice, setSelectedVoice] = useState<string>("Monica");
-  const [chatHistory, setChatHistory] = useState<MessageType[]>([]);
 
   const { userId, isLoaded, isSignedIn } = useAuth();
+
+  const [sessionInitialized, setSessionInitialized] = useState(false);
 
   const name2config = useCallback((name: string) => {
     const speechKey = process.env.NEXT_PUBLIC_SPEECH_KEY ?? "";
@@ -235,17 +236,20 @@ const AvatarSceneContent: React.FC = () => {
     if (!userId) return;
     try {
       const response = await axios.get(`/api/chat-history/${userId}`);
-      setChatHistory(response.data);
+      const history: { message: MessageType }[] = response.data;
+      const temp = history.map(({ message }) => message);
+      setMessages(temp);
     } catch (error) {
       console.error("Failed to fetch chat history:", error);
     }
   }, [userId]);
 
   useEffect(() => {
-    if (isLoaded && isSignedIn) {
+    if (isLoaded && isSignedIn && threadId && !sessionInitialized) {
       fetchChatHistory();
+      setSessionInitialized(true);
     }
-  }, [isLoaded, isSignedIn, fetchChatHistory]);
+  }, [isLoaded, isSignedIn, threadId, sessionInitialized, fetchChatHistory]);
 
   const saveMessage = useCallback(
     async (message: MessageType) => {
@@ -261,12 +265,11 @@ const AvatarSceneContent: React.FC = () => {
           timestamp: new Date(),
         });
         console.log("Message saved successfully:", response.data);
-        fetchChatHistory(); // Refresh chat history after saving
       } catch (error) {
         console.error("Failed to save message:", error);
       }
     },
-    [userId, fetchChatHistory],
+    [userId],
   );
 
   const initializeThread = useCallback(async () => {
@@ -1165,20 +1168,6 @@ const AvatarSceneContent: React.FC = () => {
             Error: {streamError}
           </div>
         )}
-        <div className="chat-history mt-2 p-2 bg-gray-100 overflow-y-auto text-xs">
-          <h3 className="text-sm font-semibold mb-1">Chat History</h3>
-          {chatHistory.map((chat, index) => (
-            <div
-              key={index}
-              className={`chat-message p-1 mb-1 rounded ${
-                chat.role === "user" ? "bg-blue-100" : "bg-green-100"
-              }`}
-            >
-              <strong>{chat.role === "user" ? "You: " : "Assistant: "}</strong>
-              {chat.content}
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );

@@ -14,7 +14,7 @@ export default function Home() {
     } else {
       // You might want to open the sign-in modal here
       // For now, we'll just redirect to the sign-in page
-      router.push("/sign-in");
+      router.push("/sign-in" as any);
     }
   };
 

@@ -58,7 +58,7 @@ export async function GET(
     const chats = await db
       .collection("chats")
       .find({ userId })
-      .sort({ timestamp: -1 })
+      .sort({ timestamp: 1 })
       .toArray();
     console.log(
       `[GET] /api/chat-history/${params.userId} - Fetched ${chats.length} chat messages`,
