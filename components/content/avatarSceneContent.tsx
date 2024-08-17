@@ -36,8 +36,12 @@ import {
 import Ammo from "ammojs-typed";
 import * as Colyseus from "colyseus.js";
 import { AdvancedDynamicTexture, TextBlock, Button } from "@babylonjs/gui";
-import RecordRTC, { MediaStreamRecorder } from "recordrtc";
+import RecordRTC from "recordrtc";
 import { toast } from "react-toastify";
+import * as speechsdk from "microsoft-cognitiveservices-speech-sdk";
+import axios from "axios";
+import { useAuth } from "@clerk/nextjs";
+import { AssistantStreamEvent } from "openai/resources/beta/assistants.mjs";
 
 interface MessageType {
   role: "user" | "assistant";
@@ -50,8 +54,6 @@ interface CodeProps {
   className?: string;
   children?: React.ReactNode;
 }
-
-const MAX_TOKENS = 4000;
 
 function generateRandomName(): string {
   const names = [
@@ -91,7 +93,8 @@ function createPlayerAvatar(
     scene,
   );
 
-  avatar.position = position || new Vector3(0, 5, 0);
+  // Set the new spawn position
+  avatar.position = position || new Vector3(0, 1, -5); // Changed from (0, 5, 0)
   avatar.rotation = rotation || new Vector3(0, 0, 0);
 
   avatar.physicsImpostor = new PhysicsImpostor(
@@ -149,8 +152,120 @@ const AvatarSceneContent: React.FC = () => {
   const [streamError, setStreamError] = useState<string | null>(null);
 
   const [isSpeechEnabled, setIsSpeechEnabled] = useState<boolean>(false);
-  const [selectedVoice, setSelectedVoice] =
-    useState<SpeechSynthesisVoice | null>(null);
+  const [selectedVoice, setSelectedVoice] = useState<string>("Monica");
+  const [chatHistory, setChatHistory] = useState<MessageType[]>([]);
+
+  const { userId } = useAuth();
+
+  const name2config = useCallback((name: string) => {
+    const speechKey = process.env.NEXT_PUBLIC_SPEECH_KEY ?? "";
+    const serviceRegion = process.env.NEXT_PUBLIC_SPEECH_REGION ?? "";
+    const speechConfig = speechsdk.SpeechConfig.fromSubscription(
+      speechKey,
+      serviceRegion,
+    );
+
+    switch (name.toLowerCase()) {
+      case "monica":
+        speechConfig.speechSynthesisVoiceName = "en-US-MonicaNeural";
+        break;
+      case "michelle":
+        speechConfig.speechSynthesisVoiceName = "en-US-MichelleNeural";
+        break;
+      case "roger":
+        speechConfig.speechSynthesisVoiceName = "en-US-RogerNeural";
+        break;
+      case "steffan":
+        speechConfig.speechSynthesisVoiceName = "en-US-SteffanNeural";
+        break;
+      default:
+        throw new Error(
+          "Currently only support Monica, Michelle, Roger and Steffan",
+        );
+    }
+    return speechConfig;
+  }, []);
+
+  const speakMessage = useCallback(
+    (text: string) => {
+      if (!isSpeechEnabled) return;
+
+      const speechConfig = name2config(selectedVoice);
+      const synthesizer = new speechsdk.SpeechSynthesizer(speechConfig);
+      const ssmlText = `
+    <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="en-US">
+      <voice name="${speechConfig.speechSynthesisVoiceName}">
+        <prosody rate="1.1" pitch="+0.3st">
+          <mstts:express-as style="professional" styledegree="1.5">
+            <prosody rate="1.05">
+              <break time="100ms"/>
+              ${text.replace(/\. /g, '.<break time="300ms"/> ')}
+            </prosody>
+          </mstts:express-as>
+        </prosody>
+      </voice>
+    </speak>`;
+
+      synthesizer.speakSsmlAsync(
+        ssmlText,
+        (result) => {
+          if (
+            result.reason === speechsdk.ResultReason.SynthesizingAudioCompleted
+          ) {
+            console.log("Speech synthesized successfully for text:", text);
+          } else {
+            console.error("Speech synthesis failed:", result.errorDetails);
+            console.log(
+              "Result reason:",
+              speechsdk.ResultReason[result.reason],
+            );
+          }
+          synthesizer.close();
+        },
+        (error) => {
+          console.error("Error during speech synthesis:", error);
+          synthesizer.close();
+        },
+      );
+    },
+    [isSpeechEnabled, selectedVoice, name2config],
+  );
+
+  const fetchChatHistory = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const response = await axios.get(`/api/chat-history/${userId}`);
+      setChatHistory(response.data);
+    } catch (error) {
+      console.error("Failed to fetch chat history:", error);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    fetchChatHistory();
+  }, [fetchChatHistory]);
+
+  const saveMessage = useCallback(
+    async (message: MessageType) => {
+      if (!userId) {
+        console.log("saveMessage: No userId, skipping save");
+        return;
+      }
+      try {
+        console.log("Saving message:", message);
+        const response = await axios.post("/api/chat-history", {
+          userId,
+          message,
+          timestamp: new Date(),
+        });
+        console.log("Message saved successfully:", response.data);
+        fetchChatHistory(); // Refresh chat history after saving
+      } catch (error) {
+        console.error("Failed to save message:", error);
+      }
+    },
+    [userId, fetchChatHistory],
+  );
 
   const initializeThread = useCallback(async () => {
     try {
@@ -443,7 +558,7 @@ const AvatarSceneContent: React.FC = () => {
             shelfMesh.actionManager = new ActionManager(scene);
             shelfMesh.actionManager.registerAction(
               new ExecuteCodeAction(ActionManager.OnPickTrigger, () => {
-                window.location.href = "/student/content";
+                window.location.href = "/student/content/shelf";
               }),
             );
             shelfMesh.actionManager.registerAction(
@@ -477,7 +592,7 @@ const AvatarSceneContent: React.FC = () => {
       // Camera setup
       const camera = new UniversalCamera(
         "camera",
-        new Vector3(0, 5, -10),
+        new Vector3(0, 1.5, -7),
         scene,
       );
       camera.setTarget(avatar.position);
@@ -646,90 +761,112 @@ const AvatarSceneContent: React.FC = () => {
     }
   };
 
-  const handleStream = (stream: AssistantStream): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      let assistantResponse = "";
-      const timeoutDuration = 30000; // 30 seconds timeout
-      const controller = new AbortController();
-      let timeoutId: NodeJS.Timeout;
+  const handleStream = useCallback(
+    (stream: AssistantStream): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        let assistantResponse = "";
+        const timeoutDuration = 30000; // 30 seconds timeout
+        const controller = new AbortController();
+        let timeoutId: NodeJS.Timeout;
 
-      const resetTimeout = () => {
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => {
-          controller.abort();
-          reject(new Error("Stream timeout"));
-        }, timeoutDuration);
-      };
+        const resetTimeout = () => {
+          clearTimeout(timeoutId);
+          timeoutId = setTimeout(() => {
+            controller.abort();
+            reject(new Error("Stream timeout"));
+          }, timeoutDuration);
+        };
 
-      // Initial timeout set
-      resetTimeout();
-
-      stream.on("textCreated", (): void => {
-        setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-      });
-
-      stream.on("textDelta", (delta: { value?: string }): void => {
-        if (delta.value != null) {
-          assistantResponse += delta.value;
-          setMessages((prev) => {
-            const newMessages = [...prev];
-            newMessages[newMessages.length - 1].content = assistantResponse;
-            return newMessages;
-          });
-          speakMessage(delta.value);
-        }
-        // Reset the timeout on each delta received
+        // Initial timeout set
         resetTimeout();
-      });
 
-      stream.on("event", (event: { event: string }): void => {
-        if (event.event === "thread.run.completed") {
+        stream.on("textCreated", (): void => {
+          console.log("Assistant started new message");
+          setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+        });
+
+        stream.on("textDelta", (delta: { value?: string }): void => {
+          if (delta.value != null) {
+            assistantResponse += delta.value;
+            console.log("Received text delta:", delta.value);
+            setMessages((prev) => {
+              const newMessages = [...prev];
+              newMessages[newMessages.length - 1].content = assistantResponse;
+              return newMessages;
+            });
+            speakMessage(delta.value);
+          }
+          // Reset the timeout on each delta received
+          resetTimeout();
+        });
+
+        stream.on("event", (event: AssistantStreamEvent): void => {
+          console.log("Received event:", event.event);
+          if (event.event === "thread.message.completed") {
+            const content = event.data.content[0];
+            if ("text" in content) {
+              console.log("Assistant message completed:", content.text.value);
+              saveMessage({
+                role: "assistant",
+                content: content.text.value,
+              });
+            }
+          }
+          if (event.event === "thread.run.completed") {
+            console.log("Thread run completed");
+            clearTimeout(timeoutId);
+            setInputDisabled(false);
+            setIsLoading(false);
+            resolve();
+          }
+        });
+
+        stream.on("error", (error: Error) => {
+          clearTimeout(timeoutId);
+          console.error("Stream error:", error);
+          setStreamError(error.message);
+          reject(error);
+        });
+
+        // Add a 'done' event handler
+        stream.on("end", () => {
           clearTimeout(timeoutId);
           setInputDisabled(false);
           setIsLoading(false);
           resolve();
-        }
-      });
+        });
 
-      stream.on("error", (error: Error) => {
-        clearTimeout(timeoutId);
-        console.error("Stream error:", error);
-        setStreamError(error.message);
-        reject(error);
+        // Cleanup function
+        return () => {
+          clearTimeout(timeoutId);
+          controller.abort();
+        };
       });
-
-      // Add a 'done' event handler
-      stream.on("end", () => {
-        clearTimeout(timeoutId);
-        setInputDisabled(false);
-        setIsLoading(false);
-        resolve();
-      });
-
-      // Cleanup function
-      return () => {
-        clearTimeout(timeoutId);
-        controller.abort();
-      };
-    });
-  };
+    },
+    [speakMessage, saveMessage],
+  );
 
   const handleUserInput = useCallback(async (): Promise<void> => {
     if (userInput.trim() !== "" || audioBlob) {
+      let userMessage: MessageType;
       if (audioBlob) {
-        setMessages((prev) => [
-          ...prev,
-          { role: "user", content: "Audio message" },
-        ]);
+        userMessage = { role: "user", content: "Audio message" };
+      } else {
+        userMessage = { role: "user", content: userInput };
+      }
+      console.log("Handling user input:", userMessage);
+      setMessages((prev) => [...prev, userMessage]);
+      await saveMessage(userMessage);
+
+      if (audioBlob) {
         await sendMessage("", audioBlob);
         setAudioBlob(null);
       } else {
-        setMessages((prev) => [...prev, { role: "user", content: userInput }]);
         await sendMessage(userInput);
       }
       setUserInput("");
     }
-  }, [userInput, audioBlob, sendMessage]);
+  }, [userInput, audioBlob, sendMessage, saveMessage]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -804,24 +941,24 @@ const AvatarSceneContent: React.FC = () => {
   const renderMessage = (msg: MessageType, id: number): JSX.Element => (
     <div
       key={id}
-      className={`mb-2 p-3 rounded-lg ${
+      className={`mb-1 p-1 rounded-lg ${
         msg.role === "user"
           ? "bg-blue-50 border-blue-200"
           : "bg-green-50 border-green-200"
-      } border max-w-full break-words shadow-sm`}
+      } border max-w-full break-words shadow-sm text-xs`}
     >
       <div className="flex items-center mb-1">
         {msg.role === "user" ? (
-          <FaGraduationCap className="mr-2 text-blue-500" />
+          <FaGraduationCap className="mr-1 text-blue-500" size={10} />
         ) : (
-          <FaChalkboardTeacher className="mr-2 text-green-500" />
+          <FaChalkboardTeacher className="mr-1 text-green-500" size={10} />
         )}
-        <strong className="font-semibold text-sm text-gray-700">
+        <strong className="font-semibold text-xs text-gray-700">
           {msg.role === "user" ? "Student" : "Teacher"}
         </strong>
       </div>
       <ReactMarkdown
-        className="mt-1 text-sm text-gray-800"
+        className="mt-1 text-xs text-gray-800"
         components={{
           code({ node, inline, className, children, ...props }: CodeProps) {
             const match = /language-(\w+)/.exec(className ?? "");
@@ -836,7 +973,7 @@ const AvatarSceneContent: React.FC = () => {
               </SyntaxHighlighter>
             ) : (
               <code
-                className={`${className} bg-gray-100 rounded px-1 py-0.5 text-sm`}
+                className={`${className} bg-gray-100 rounded px-1 py-0.5 text-xs`}
                 {...props}
               >
                 {children}
@@ -847,13 +984,13 @@ const AvatarSceneContent: React.FC = () => {
             <p className="mb-2 max-w-full break-words">{children}</p>
           ),
           h1: ({ children }) => (
-            <h1 className="text-xl font-bold mb-2">{children}</h1>
+            <h1 className="text-xs font-bold mb-2">{children}</h1>
           ),
           h2: ({ children }) => (
-            <h2 className="text-lg font-bold mb-2">{children}</h2>
+            <h2 className="text-xs font-bold mb-2">{children}</h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-base font-semibold mb-2">{children}</h3>
+            <h3 className="text-xs font-semibold mb-2">{children}</h3>
           ),
           ul: ({ children }) => (
             <ul className="list-disc pl-4 mb-2">{children}</ul>
@@ -886,7 +1023,7 @@ const AvatarSceneContent: React.FC = () => {
           ),
           table: ({ children }) => (
             <div className="overflow-x-auto">
-              <table className="table-auto border-collapse border border-gray-300 my-2 text-sm">
+              <table className="table-auto border-collapse border border-gray-300 my-2 text-xs">
                 {children}
               </table>
             </div>
@@ -907,81 +1044,22 @@ const AvatarSceneContent: React.FC = () => {
     </div>
   );
 
-  const speakMessage = useCallback(
-    (text: string) => {
-      if (!isSpeechEnabled || !selectedVoice) return;
-
-      // Clean the text: remove punctuation and extra spaces
-      const cleanedText = text
-        .trim()
-        .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "")
-        .replace(/\s+/g, " ");
-
-      // Split the cleaned text into smaller chunks
-      const words = cleanedText.split(" ");
-      const chunks = [];
-      let currentChunk = "";
-
-      for (const word of words) {
-        if ((currentChunk + " " + word).length <= 100) {
-          currentChunk += (currentChunk ? " " : "") + word;
-        } else {
-          chunks.push(currentChunk);
-          currentChunk = word;
-        }
-      }
-      if (currentChunk) {
-        chunks.push(currentChunk);
-      }
-
-      chunks.forEach((chunk, index) => {
-        const utterance = new SpeechSynthesisUtterance(chunk);
-        utterance.voice = selectedVoice;
-        utterance.lang = "en-US";
-        utterance.rate = 1.3; // Slightly faster than normal
-        utterance.pitch = 1.1; // Normal pitch
-
-        // Reduce pauses between chunks
-        if (index < chunks.length - 1) {
-          utterance.onend = () => {
-            window.speechSynthesis.resume();
-          };
-        }
-
-        window.speechSynthesis.speak(utterance);
-      });
-    },
-    [isSpeechEnabled, selectedVoice],
-  );
-
   const toggleSpeech = useCallback(() => {
-    setIsSpeechEnabled((prev) => {
-      if (prev) {
-        stopSpeech();
-      }
-      return !prev;
-    });
-  }, [stopSpeech]);
+    setIsSpeechEnabled((prev) => !prev);
+  }, []);
 
   const VoiceSelector = () => {
-    const voices = window.speechSynthesis
-      .getVoices()
-      .filter((voice) => voice.lang.startsWith("en"));
+    const voices = ["Monica", "Michelle", "Roger", "Steffan"];
 
     return (
       <select
-        value={selectedVoice?.name}
-        onChange={(e) => {
-          const newVoice = voices.find(
-            (voice) => voice.name === e.target.value,
-          );
-          if (newVoice) setSelectedVoice(newVoice);
-        }}
-        className="ml-2 p-1 border rounded text-sm"
+        value={selectedVoice}
+        onChange={(e) => setSelectedVoice(e.target.value)}
+        className="ml-2 p-1 border rounded text-xs"
       >
         {voices.map((voice) => (
-          <option key={voice.name} value={voice.name}>
-            {voice.name.split(" ")[0]}
+          <option key={voice} value={voice}>
+            {voice}
           </option>
         ))}
       </select>
@@ -992,27 +1070,27 @@ const AvatarSceneContent: React.FC = () => {
     <div className="flex w-full h-[90vh]">
       <canvas
         ref={canvasRef}
-        className="w-[70%] h-full"
+        className="w-[80%] h-full"
         tabIndex={1}
         onFocus={(e) => (e.currentTarget.style.outline = "none")}
       />
-      <div className="w-[30%] h-full flex flex-col bg-gray-50 border-l border-gray-200">
-        <div className="p-2 bg-yellow-100 text-yellow-800 text-sm">
+      <div className="w-[20%] h-full flex flex-col bg-gray-50 border-l border-gray-200 text-sm">
+        <div className="p-1 bg-yellow-100 text-yellow-800 text-xs">
           Recording Status: {recordingStatus}
         </div>
-        <div className="p-4 bg-white border-b border-gray-200 flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-800">
+        <div className="p-2 bg-white border-b border-gray-200 flex justify-between items-center">
+          <h2 className="text-base font-semibold text-gray-800">
             Virtual Classroom Chat
           </h2>
           <button
             onClick={() => void startNewChat()}
-            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           >
             New Chat
           </button>
         </div>
         {messages.length === 0 && (
-          <div className="m-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+          <div className="m-2 p-2 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-800">
             <p className="font-semibold mb-1">
               Welcome to the Virtual Classroom!
             </p>
@@ -1024,57 +1102,77 @@ const AvatarSceneContent: React.FC = () => {
         )}
         <div
           ref={chatContainerRef}
-          className="flex-1 overflow-y-auto p-4 space-y-2"
+          className="flex-1 overflow-y-auto p-2 space-y-2"
         >
           {messages.map(renderMessage)}
         </div>
-        <div className="p-4 bg-white border-t border-gray-200">
-          <div className="flex items-center justify-end mb-2">
-            <button
-              onClick={toggleSpeech}
-              className={`px-3 py-1 rounded text-sm ${
-                isSpeechEnabled
-                  ? "bg-green-500 text-white"
-                  : "bg-gray-200 text-gray-600"
-              }`}
-            >
-              {isSpeechEnabled ? "Speech On" : "Speech Off"}
-            </button>
-            {isSpeechEnabled && <VoiceSelector />}
+        <div className="p-2 bg-white border-t border-gray-200">
+          <div className="flex flex-col sm:flex-row items-center justify-between mb-2 space-y-2 sm:space-y-0 sm:space-x-2">
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={toggleSpeech}
+                className={`px-2 py-1 rounded text-xs ${
+                  isSpeechEnabled
+                    ? "bg-green-500 text-white"
+                    : "bg-gray-200 text-gray-600"
+                }`}
+              >
+                {isSpeechEnabled ? "Speech On" : "Speech Off"}
+              </button>
+              {isSpeechEnabled && <VoiceSelector />}
+              <button
+                onClick={toggleRecording}
+                className={`p-1 rounded-full ${
+                  isRecording
+                    ? "bg-red-500 text-white"
+                    : "bg-gray-200 text-gray-600"
+                }`}
+              >
+                {isRecording ? (
+                  <FaMicrophoneSlash size={12} />
+                ) : (
+                  <FaMicrophone size={12} />
+                )}
+              </button>
+            </div>
           </div>
-          <div className="flex items-center">
+          <div className="flex items-center space-x-2">
             <input
               type="text"
               value={userInput}
               onChange={(e) => setUserInput(e.target.value)}
               placeholder="Ask the teacher a question..."
               disabled={inputDisabled}
-              className="flex-1 p-2 mr-2 border border-gray-300 rounded-l focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 p-2 border border-gray-300 rounded-l focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
-            <button
-              onClick={toggleRecording}
-              className={`p-2 mr-2 rounded-full ${
-                isRecording
-                  ? "bg-red-500 text-white"
-                  : "bg-gray-200 text-gray-600"
-              }`}
-            >
-              {isRecording ? <FaMicrophoneSlash /> : <FaMicrophone />}
-            </button>
             <button
               onClick={() => void handleUserInput()}
               disabled={inputDisabled || (!userInput.trim() && !audioBlob)}
-              className="px-4 py-2 bg-blue-500 text-white rounded-r hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              className="px-3 py-2 bg-blue-500 text-white rounded-r text-sm hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
-              {isLoading ? "Sending..." : "Send"}
+              {isLoading ? "..." : "Send"}
             </button>
           </div>
         </div>
         {streamError && (
-          <div className="p-2 bg-red-100 text-red-800 text-sm">
+          <div className="p-1 bg-red-100 text-red-800 text-xs">
             Error: {streamError}
           </div>
         )}
+        <div className="chat-history mt-2 p-2 bg-gray-100 overflow-y-auto text-xs">
+          <h3 className="text-sm font-semibold mb-1">Chat History</h3>
+          {chatHistory.map((chat, index) => (
+            <div
+              key={index}
+              className={`chat-message p-1 mb-1 rounded ${
+                chat.role === "user" ? "bg-blue-100" : "bg-green-100"
+              }`}
+            >
+              <strong>{chat.role === "user" ? "You: " : "Assistant: "}</strong>
+              {chat.content}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

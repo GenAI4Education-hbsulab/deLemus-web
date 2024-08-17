@@ -35,26 +35,26 @@ const guestRoutes = [
     label: "Content",
     href: { pathname: "/student/content" },
   },
-  {
-    icon: User,
-    label: "Profile",
-    href: { pathname: "/student/profile" },
-  },
-  {
-    icon: Clipboard,
-    label: "Assignments",
-    href: { pathname: "/student/assignments" },
-  },
-  {
-    icon: Bell,
-    label: "Notifications",
-    href: { pathname: "/student/notifications" },
-  },
-  {
-    icon: Settings,
-    label: "Settings",
-    href: { pathname: "/student/settings" },
-  },
+  // {
+  //   icon: User,
+  //   label: "Profile",
+  //   href: { pathname: "/student/profile" },
+  // },
+  // {
+  //   icon: Clipboard,
+  //   label: "Assignments",
+  //   href: { pathname: "/student/assignments" },
+  // },
+  // {
+  //   icon: Bell,
+  //   label: "Notifications",
+  //   href: { pathname: "/student/notifications" },
+  // },
+  // {
+  //   icon: Settings,
+  //   label: "Settings",
+  //   href: { pathname: "/student/settings" },
+  // },
 ];
 
 const teacherRoutes = [
@@ -75,7 +75,7 @@ const sidebarData: {
   items: { text: string; completed: boolean; href: UrlObject }[];
 }[] = [
   {
-    title: "Basic Knowledge",
+    title: "Computational Biology",
     items: [
       {
         text: "General Info",
@@ -97,10 +97,15 @@ const sidebarData: {
         completed: false,
         href: { pathname: "/student/content/quiz" },
       },
+      {
+        text: "Molecular View",
+        completed: false,
+        href: { pathname: "/student/content/molecule" },
+      },
     ],
   },
   {
-    title: "Virtual Classroom",
+    title: "Machine Learning",
     items: [
       {
         text: "Classroom",
@@ -115,11 +120,6 @@ const sidebarData: {
         href: {
           pathname: "/student/content/transformer",
         },
-      },
-      {
-        text: "Molecular View",
-        completed: false,
-        href: { pathname: "/student/content/molecule" },
       },
     ],
   },
@@ -160,9 +160,9 @@ const NewSideBar: React.FC = () => {
               pathname.startsWith("/student/content") && (
                 <>
                   {sidebarData.map((section, index) => (
-                    <div key={index} className="px-4">
+                    <div key={index} className="px-2">
                       <div className="flex items-center justify-between py-2">
-                        <h2 className="text-lg font-semibold">
+                        <h2 className="text-md font-semibold">
                           {section.title}
                         </h2>
                         <button

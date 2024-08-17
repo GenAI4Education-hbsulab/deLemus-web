@@ -45,6 +45,8 @@
     "cssnano": "^7.0.4",
     "lucide-react": "^0.378.0",
     "marked": "^13.0.3",
+    "microsoft-cognitiveservices-speech-sdk": "^1.40.0",
+    "mongodb": "^6.8.0",
     "next": "^14.2.5",
     "openai": "^4.0.0",
     "pdfjs-dist": "^4.5.136",
