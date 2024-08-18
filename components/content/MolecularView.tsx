@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useRef, useCallback, useState } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import {
   Engine,
   Scene,
@@ -13,8 +13,6 @@ import {
   StandardMaterial,
   Color4,
   HighlightLayer,
-  TransformNode,
-  WebXRDefaultExperience,
 } from "@babylonjs/core";
 import "@babylonjs/loaders";
 import "@babylonjs/gui";
@@ -24,9 +22,6 @@ import "@babylonjs/inspector"; // Optional, for debugging
 
 const MolecularView: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isVRSupported, setIsVRSupported] = useState(false);
-  const [xrExperience, setXRExperience] =
-    useState<WebXRDefaultExperience | null>(null);
 
   const handleWheel = useCallback((event: WheelEvent) => {
     event.preventDefault();
@@ -88,97 +83,63 @@ const MolecularView: React.FC = () => {
         ground.material = groundMaterial;
 
         // Load the model
+        let modelMesh: Mesh;
         const createScene = async () => {
-          try {
-            const result = await SceneLoader.ImportMeshAsync(
-              "",
-              "/",
-              "5KB2.glb",
-              scene,
-            );
+          const result = await SceneLoader.ImportMeshAsync(
+            "",
+            "/",
+            "5KB2.glb",
+            scene,
+          );
+          modelMesh = result.meshes[0] as Mesh;
+          modelMesh.position.y = 20; // Position the model above the ground
 
-            console.log("Loaded meshes:", result.meshes);
+          // Highlight layer
+          const highlightLayer = new HighlightLayer("hl1", scene);
 
-            if (!result.meshes || result.meshes.length === 0) {
-              console.error("No meshes were loaded from the model");
-              return;
-            }
+          const xrHelper = await scene.createDefaultXRExperienceAsync({
+            floorMeshes: [ground],
+          });
 
-            // Create a TransformNode to act as the parent for all meshes
-            const modelRoot = new TransformNode("modelRoot", scene);
+          let mesh: Mesh | null = null;
 
-            // Parent all loaded meshes to the TransformNode
-            result.meshes.forEach((mesh) => {
-              mesh.parent = modelRoot;
-            });
-
-            // Position the entire model
-            modelRoot.position.y = 20; // Position the model above the ground
-
-            // Make the model pickable
-            modelRoot.getChildMeshes().forEach((mesh) => {
-              mesh.isPickable = true;
-            });
-
-            console.log("Model root position:", modelRoot.position);
-
-            // Highlight layer
-            const highlightLayer = new HighlightLayer("hl1", scene);
-
-            const xrHelper = await scene.createDefaultXRExperienceAsync({
-              floorMeshes: [ground],
-            });
-
-            setXRExperience(xrHelper);
-            setIsVRSupported(
-              await xrHelper.baseExperience.sessionManager.isSessionSupportedAsync(
-                "immersive-vr",
-              ),
-            );
-
-            let mesh: Mesh | null = null;
-
-            xrHelper.input.onControllerAddedObservable.add((controller) => {
-              controller.onMotionControllerInitObservable.add(
-                (motionController) => {
-                  if (
-                    motionController.handness === "left" ||
-                    motionController.handness === "right"
-                  ) {
-                    const xr_ids = motionController.getComponentIds();
-                    let triggerComponent = motionController.getComponent(
-                      xr_ids[0],
-                    );
-                    triggerComponent.onButtonStateChangedObservable.add(() => {
-                      if (triggerComponent.changes.pressed) {
-                        if (triggerComponent.pressed) {
-                          if (xrHelper.pointerSelection.getMeshUnderPointer) {
-                            mesh =
-                              xrHelper.pointerSelection.getMeshUnderPointer(
-                                controller.uniqueId,
-                              ) as Mesh;
-                          } else {
-                            mesh = scene.meshUnderPointer as Mesh;
-                          }
-                          if (mesh && mesh !== ground) {
-                            mesh.setParent(motionController.rootMesh);
-                            // Highlight the model when picked up
-                            highlightLayer.addMesh(mesh, Color3.Yellow());
-                          }
-                        } else if (mesh) {
-                          mesh.setParent(null);
-                          // Remove highlight when released
-                          highlightLayer.removeMesh(mesh);
+          xrHelper.input.onControllerAddedObservable.add((controller) => {
+            controller.onMotionControllerInitObservable.add(
+              (motionController) => {
+                if (
+                  motionController.handness === "left" ||
+                  motionController.handness === "right"
+                ) {
+                  const xr_ids = motionController.getComponentIds();
+                  let triggerComponent = motionController.getComponent(
+                    xr_ids[0],
+                  );
+                  triggerComponent.onButtonStateChangedObservable.add(() => {
+                    if (triggerComponent.changes.pressed) {
+                      if (triggerComponent.pressed) {
+                        if (xrHelper.pointerSelection.getMeshUnderPointer) {
+                          mesh = xrHelper.pointerSelection.getMeshUnderPointer(
+                            controller.uniqueId,
+                          ) as Mesh;
+                        } else {
+                          mesh = scene.meshUnderPointer as Mesh;
                         }
+                        if (mesh && mesh !== ground) {
+                          mesh.setParent(motionController.rootMesh);
+                          // Highlight the model when picked up
+                          highlightLayer.addMesh(mesh, Color3.Yellow());
+                        }
+                      } else if (mesh) {
+                        mesh.setParent(null);
+                        // Remove highlight when released
+                        highlightLayer.removeMesh(mesh);
                       }
-                    });
-                  }
-                },
-              );
-            });
-          } catch (error) {
-            console.error("Error loading or processing the model:", error);
-          }
+                    }
+                  });
+                }
+              },
+            );
+          });
         };
 
         createScene();
@@ -200,44 +161,7 @@ const MolecularView: React.FC = () => {
     initializeBabylon();
   }, []);
 
-  const enterVR = async () => {
-    if (xrExperience) {
-      try {
-        await xrExperience.baseExperience.enterXRAsync(
-          "immersive-vr",
-          "local-floor",
-        );
-      } catch (error) {
-        console.error("Error entering VR:", error);
-      }
-    }
-  };
-
-  return (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <canvas ref={canvasRef} style={{ width: "100%", height: "100%" }} />
-      {isVRSupported && (
-        <button
-          onClick={enterVR}
-          style={{
-            position: "absolute",
-            bottom: "20px",
-            right: "20px",
-            padding: "10px 20px",
-            fontSize: "16px",
-            backgroundColor: "#4CAF50",
-            color: "white",
-            border: "none",
-            borderRadius: "5px",
-            cursor: "pointer",
-            boxShadow: "0 2px 5px rgba(0,0,0,0.2)",
-          }}
-        >
-          Enter VR
-        </button>
-      )}
-    </div>
-  );
+  return <canvas ref={canvasRef} style={{ width: "100%", height: "100%" }} />;
 };
 
 export default MolecularView;
