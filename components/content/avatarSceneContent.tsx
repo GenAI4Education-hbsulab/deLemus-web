@@ -193,15 +193,20 @@ const AvatarSceneContent: React.FC = () => {
 
       const speechConfig = name2config(selectedVoice);
       const synthesizer = new speechsdk.SpeechSynthesizer(speechConfig);
+
+      // Add natural pauses and emphasis
+      const processedText = text
+        .replace(/\. /g, '.<break time="500ms"/> ')
+        .replace(/,/g, ',<break time="200ms"/>');
+
       const ssmlText = `
     <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="en-US">
       <voice name="${speechConfig.speechSynthesisVoiceName}">
-        <prosody rate="1.1" pitch="+0.3st">
-          <mstts:express-as style="professional" styledegree="1.5">
-            <prosody rate="1.05">
-              <break time="100ms"/>
-              ${text.replace(/\. /g, '.<break time="300ms"/> ')}
-            </prosody>
+        <prosody rate="0.9" pitch="+0.2st">
+          <mstts:express-as style="chat" styledegree="1.2">
+            <say-as interpret-as="interjection">Hmm, </say-as>
+            <break time="300ms"/>
+            ${processedText}
           </mstts:express-as>
         </prosody>
       </voice>
@@ -740,14 +745,19 @@ const AvatarSceneContent: React.FC = () => {
           start(controller) {
             return pump();
             async function pump(): Promise<void> {
-              return reader.read().then(({ done, value }) => {
+              try {
+                const { done, value } = await reader.read();
                 if (done) {
+                  console.log("Stream complete");
                   controller.close();
                   return;
                 }
                 controller.enqueue(value);
                 return pump();
-              });
+              } catch (error) {
+                console.error("Error in pump:", error);
+                controller.error(error);
+              }
             }
           },
         });
@@ -835,6 +845,7 @@ const AvatarSceneContent: React.FC = () => {
 
         // Add a 'done' event handler
         stream.on("end", () => {
+          console.log("Stream ended");
           clearTimeout(timeoutId);
           setInputDisabled(false);
           setIsLoading(false);

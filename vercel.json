@@ -1,6 +1,10 @@
 {
-    "builds": [
-      { "src": "package.json", "use": "@vercel/next" }
-    ]
+  "builds": [
+    { "src": "package.json", "use": "@vercel/next" }
+  ],
+  "functions": {
+    "app/api/assistants/threads/[threadId]/messages/route.ts": {
+      "maxDuration": 300
+    }
   }
-  
+}
