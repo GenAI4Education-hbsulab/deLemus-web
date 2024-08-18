@@ -88,7 +88,7 @@ const MolecularView: React.FC = () => {
           const result = await SceneLoader.ImportMeshAsync(
             "",
             "/",
-            "5KB2.glb",
+            "1MBN.glb",
             scene,
           );
           modelMesh = result.meshes[0] as Mesh;
