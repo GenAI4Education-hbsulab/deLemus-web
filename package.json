@@ -26,7 +26,7 @@
     "@babylonjs/loaders": "^7.15.0",
     "@babylonjs/materials": "^7.15.0",
     "@babylonjs/serializers": "^7.15.0",
-    "@clerk/nextjs": "^5.1.5",
+    "@clerk/nextjs": "^5.3.1",
     "@hookform/resolvers": "^3.4.2",
     "@prisma/client": "^5.17.0",
     "@radix-ui/react-dialog": "^1.0.5",

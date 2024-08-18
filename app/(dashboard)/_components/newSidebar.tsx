@@ -148,9 +148,8 @@ const NewSideBar: React.FC = () => {
       </div>
       <div className="flex flex-col w-full overflow-y-auto">
         {routes.map((route, i) => (
-          <>
+          <React.Fragment key={route.label}>
             <SidebarItem
-              key={i}
               icon={route.icon}
               label={route.label}
               href={route.href}
@@ -202,7 +201,7 @@ const NewSideBar: React.FC = () => {
                   ))}
                 </>
               )}
-          </>
+          </React.Fragment>
         ))}
       </div>
     </div>
