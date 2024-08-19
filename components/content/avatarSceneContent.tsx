@@ -315,7 +315,7 @@ const AvatarSceneContent: React.FC = () => {
       );
 
       // Server
-      const client = new Colyseus.Client("http://219.77.74.96:2567");
+      const client = new Colyseus.Client("https://delemus-backend.fly.dev/");
       client
         .joinOrCreate("my_room")
         .then((roomInstance: Colyseus.Room) => {
