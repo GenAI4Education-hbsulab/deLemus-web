@@ -29,6 +29,16 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
 
+All scenes can be found in the `components` folder and changes can be made there.
+
+Colyseus files can be found in the [`colyseus branch`](https://github.com/hans2001/deLemus-web/tree/colyseus?tab=readme-ov-file) inside the server folder. Currently multipayer is only used in the virtual classroom. If multiplayer is needed for other scenes, create a new room in `/src/rooms`.
+
+To start the colyseus server locally, go to the server folder and start it using:
+```bash
+npm start
+```
+make sure to change client instance in your scene to [http://localhost:2567](http://localhost:2567) (colyseus default). At the moment it is [https://delemus-backend.fly.dev/](https://delemus-backend.fly.dev/)
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
