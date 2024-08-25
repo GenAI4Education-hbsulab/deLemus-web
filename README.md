@@ -1,5 +1,6 @@
 This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
+!!Ensure you have generated an SSH key for GitHub, a private key on-prem ( at ./ssh), public key put inside the GitHub account settings
 ## Getting Started
 first, clone the repo to your local device with 
 ```bash
