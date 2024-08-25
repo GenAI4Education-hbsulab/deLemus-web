@@ -2,10 +2,12 @@ This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next
 
 ## Getting Started
 first, clone the repo to your local device with ```bash
-git clone git@github.com:hans2001/deLemus-web.git ```
+git clone git@github.com:hans2001/deLemus-web.git 
+```
 assume the name of the repo is deLemus-web, then cd into <username>/deLemus-web
 at root directory(deLemus-web/),run ```bash 
-npm install``` to install required packages for the project( this is specified in the pakcage.json)
+npm install
+``` to install required packages for the project( this is specified in the pakcage.json)
 
 FYI: Usually, the deployed branch is branch main, and the development branch is branch dev. Integrate all members' work at the branch dev
 . Once anyone pushes to the branch main, deployment at Vercel will be triggered, so the admin should protect the branch main from being pushed with approval!!
