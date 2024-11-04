@@ -67,16 +67,16 @@ export async function GET(
     console.log(
       `[GET] /api/chat-history/${params.slug.join(
         "/",
-      )}} - Fetching chat history`,
+      )} - Fetching chat history`,
     );
 
-    var searchUserId = undefined;
+    var searchParams = {};
     if (userId != "all") {
-      searchUserId = userId;
+      searchParams = { userId: userId };
     }
     const chats = await db
       .collection("chats")
-      .find({ userId: searchUserId })
+      .find(searchParams)
       .sort({ timestamp: 1 })
       .toArray();
     console.log(
@@ -96,7 +96,7 @@ export async function GET(
       case "csv":
         finalOutput = chats
           .map((chat) => {
-            return `${chat.timestamp},${chat.message}`;
+            return `${chat.timestamp},${chat.message.role},"${chat.message.content}"`;
           })
           .join("\n");
         finalOutputHeader = "text/csv";
