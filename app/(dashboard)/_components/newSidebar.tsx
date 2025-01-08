@@ -93,14 +93,34 @@ const sidebarData: {
         href: { pathname: "/student/content/jn1" },
       },
       {
-        text: "Quiz",
+        text: "Biology Quiz",
         completed: false,
         href: { pathname: "/student/content/quiz" },
+      },
+      {
+        text: "AI Quiz",
+        completed: false,
+        href: { pathname: "/student/content/ai-quiz" },
       },
       {
         text: "Molecular View",
         completed: false,
         href: { pathname: "/student/content/molecule" },
+      },
+      {
+        text: "Molecular View (PDB)",
+        completed: false,
+        href: { pathname: "/student/content/pdb-covid" },
+      },
+      {
+        text: "VR (Nanome)",
+        completed: false,
+        href: { pathname: "/student/content/nanome" },
+      },
+      {
+        text: "LLM",
+        completed: false,
+        href: { pathname: "/student/content/gpt3" },
       },
     ],
   },

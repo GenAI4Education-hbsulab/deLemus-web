@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     const assistant = await openai.beta.assistants.create({
       name: name || "Quickstart Assistant",
       instructions: instructions || "You are a helpful assistant.",
-      model: model || "gpt-4-1106-preview",
+      model: model || "gpt-4o-ca",
       tools: tools || [
         { type: "code_interpreter" },
         { type: "retrieval" },

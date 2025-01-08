@@ -1088,12 +1088,12 @@ const AvatarSceneContent: React.FC = () => {
 
   return (
     <div className="flex w-full h-[90vh]">
-      <canvas
+      {/* <canvas
         ref={canvasRef}
         className="w-[80%] h-full"
         tabIndex={1}
         onFocus={(e) => (e.currentTarget.style.outline = "none")}
-      />
+      /> */}
       <div className="w-[20%] h-full flex flex-col bg-gray-50 border-l border-gray-200 text-sm">
         <div className="p-1 bg-yellow-100 text-yellow-800 text-xs">
           Recording Status: {recordingStatus}
