@@ -85,42 +85,37 @@ const sidebarData: {
       {
         text: "KP.2",
         completed: false,
-        href: { pathname: "/student/content/kp2" },
+        href: { pathname: "/student/content/comp-bio/kp2" },
       },
       {
         text: "JN.1",
         completed: false,
-        href: { pathname: "/student/content/jn1" },
+        href: { pathname: "/student/content/comp-bio/jn1" },
       },
       {
         text: "Biology Quiz",
         completed: false,
-        href: { pathname: "/student/content/quiz" },
-      },
-      {
-        text: "AI Quiz",
-        completed: false,
-        href: { pathname: "/student/content/ai-quiz" },
+        href: { pathname: "/student/content/comp-bio/quiz" },
       },
       {
         text: "Molecular View",
         completed: false,
-        href: { pathname: "/student/content/molecule" },
+        href: { pathname: "/student/content/comp-bio/molecule" },
       },
       {
         text: "Molecular View (PDB)",
         completed: false,
-        href: { pathname: "/student/content/pdb-covid" },
+        href: { pathname: "/student/content/comp-bio/pdb-covid" },
       },
       {
         text: "VR (Nanome)",
         completed: false,
-        href: { pathname: "/student/content/nanome" },
+        href: { pathname: "/student/content/comp-bio/nanome" },
       },
       {
-        text: "LLM",
+        text: "Virtual Lab",
         completed: false,
-        href: { pathname: "/student/content/gpt3" },
+        href: { pathname: "/student/content/comp-bio/virtual-lab" },
       },
     ],
   },
@@ -128,17 +123,47 @@ const sidebarData: {
     title: "Machine Learning",
     items: [
       {
-        text: "Classroom",
+        text: "LLM",
         completed: false,
-        href: {
-          pathname: "/student/content/immersive",
-        },
+        href: { pathname: "/student/content/machine-learn/gpt3" },
+      },
+      {
+        text: "PCA",
+        completed: false,
+        href: { pathname: "/student/content/machine-learn/pca" },
+      },
+      {
+        text: "Neural Networks",
+        completed: false,
+        href: { pathname: "/student/content/machine-learn/neural-net" },
+      },
+      {
+        text: "Visualize Clustering",
+        completed: false,
+        href: { pathname: "/student/content/machine-learn/clustering" },
+      },
+      {
+        text: "Train a Neural Network",
+        completed: false,
+        href: { pathname: "/student/content/machine-learn/train-neural-net" },
+      },
+      {
+        text: "AI Quiz",
+        completed: false,
+        href: { pathname: "/student/content/machine-learn/ai-quiz" },
       },
       {
         text: "Transformer Model",
         completed: false,
         href: {
-          pathname: "/student/content/transformer",
+          pathname: "/student/content/machine-learn/transformer",
+        },
+      },
+      {
+        text: "Classroom",
+        completed: false,
+        href: {
+          pathname: "/student/content/machine-learn/immersive",
         },
       },
     ],

@@ -69,6 +69,7 @@ export async function POST(
       // Check for active runs
       const runs = await openai.beta.threads.runs.list(threadId);
       const activeRun = runs.data.find((run) => run.status === "in_progress");
+      console.log("flag 1");
 
       if (activeRun) {
         log(
@@ -79,6 +80,7 @@ export async function POST(
       }
 
       log("info", `Creating message for thread ${threadId}`);
+      console.log("flag 2");
       await openai.beta.threads.messages.create(threadId, {
         role: "user",
         content: content,

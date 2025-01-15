@@ -280,16 +280,18 @@ const AvatarSceneContent: React.FC = () => {
   const initializeThread = useCallback(async () => {
     try {
       const res = await fetch("/api/assistants/threads", { method: "POST" });
-      const data: { threadId: string } = await res.json();
-      setThreadId(data.threadId);
+      const data = await res.json();
+      setThreadId(data.threadId); // Ensure this is correctly set
     } catch (error) {
       console.error("Failed to initialize thread:", error);
     }
   }, []);
 
   useEffect(() => {
-    void initializeThread();
-  }, [initializeThread]);
+    if (isLoaded && isSignedIn && !threadId) {
+      initializeThread();
+    }
+  }, [isLoaded, isSignedIn, threadId, initializeThread]);
 
   const stopSpeech = useCallback(() => {
     window.speechSynthesis.cancel();
@@ -715,6 +717,11 @@ const AvatarSceneContent: React.FC = () => {
   }, []);
 
   const sendMessage = async (text: string, audio?: Blob): Promise<void> => {
+    if (!threadId) {
+      console.error("Thread ID is not set. Cannot send message.");
+      return;
+    }
+
     try {
       setInputDisabled(true);
       setIsLoading(true);
