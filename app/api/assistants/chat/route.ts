@@ -53,7 +53,9 @@ export async function POST(request: NextRequest) {
 
       // Send the full response back to the client
       return new Response(
-        JSON.stringify({ content: completion.choices[0].message.content }),
+        JSON.stringify({
+          content: completion.choices[0].message.content,
+        }),
         {
           status: 200,
           headers: { "Content-Type": "application/json" },
@@ -63,7 +65,9 @@ export async function POST(request: NextRequest) {
       retries++;
       if (retries >= MAX_RETRIES) {
         return new Response(
-          JSON.stringify({ error: "Failed to process request after retries" }),
+          JSON.stringify({
+            error: "Failed to process request after retries",
+          }),
           {
             status: 500,
             headers: { "Content-Type": "application/json" },
