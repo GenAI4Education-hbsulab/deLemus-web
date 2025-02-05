@@ -191,7 +191,10 @@ const NewSideBar: React.FC = () => {
       <div className="p-4 bg-white">
         <NewLogo />
       </div>
-      <div className="flex flex-col w-full overflow-y-auto">
+      <div
+        className="flex flex-col w-full"
+        style={{ height: "80vh", overflowY: "auto" }}
+      >
         {routes.map((route, i) => (
           <React.Fragment key={route.label}>
             <SidebarItem

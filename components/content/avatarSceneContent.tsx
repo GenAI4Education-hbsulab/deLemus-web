@@ -15,6 +15,7 @@ import RecordRTC from "recordrtc";
 import { toast } from "react-toastify";
 import axios from "axios";
 import { useAuth } from "@clerk/nextjs";
+import { time } from "console";
 
 interface MessageType {
   role: "user" | "assistant";
@@ -141,7 +142,11 @@ const AvatarSceneContent: React.FC = () => {
   const saveMessage = async (message: MessageType) => {
     if (!userId) return;
     try {
-      await axios.post("/api/chat-history", { userId, message });
+      await axios.post("/api/chat-history", {
+        userId,
+        message,
+        timestamp: new Date().toISOString(),
+      });
     } catch (error) {
       console.error("Failed to save message:", error);
     }
