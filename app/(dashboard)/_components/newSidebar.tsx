@@ -159,13 +159,6 @@ const sidebarData: {
           pathname: "/student/content/machine-learn/transformer",
         },
       },
-      {
-        text: "Classroom",
-        completed: false,
-        href: {
-          pathname: "/student/content/machine-learn/immersive",
-        },
-      },
     ],
   },
   {
@@ -188,6 +181,19 @@ const sidebarData: {
       },
     ],
   },
+  {
+    title: "GenAI Bot",
+    items: [
+      {
+        text: "GenAI Bot",
+        completed: false,
+        href: {
+          pathname: "/student/content/GenAI-bot/immersive",
+        },
+      },
+    ],
+  },
+  
 ];
 
 const NewSideBar: React.FC = () => {
