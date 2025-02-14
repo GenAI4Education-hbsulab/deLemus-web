@@ -184,7 +184,7 @@ const sidebarData: {
       {
         text: "Linear Algebra",
         completed: false,
-        href: { pathname: "/student/content/prob-stat/siegrist" },
+        href: { pathname: "/student/content/linear-algebra/linear-algebra" },
       },
     ],
   },
