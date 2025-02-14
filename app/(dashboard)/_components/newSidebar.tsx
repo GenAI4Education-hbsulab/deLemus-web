@@ -172,7 +172,17 @@ const sidebarData: {
     title: "Probabilities & Statistics",
     items: [
       {
-        text: "Probability, Mathematical Statistics, and Stochastic Processes (Siegrist)",
+        text: "Probabilities & Statistics",
+        completed: false,
+        href: { pathname: "/student/content/prob-stat/siegrist" },
+      },
+    ],
+  },
+  {
+    title: "Linear Algebra",
+    items: [
+      {
+        text: "Linear Algebra",
         completed: false,
         href: { pathname: "/student/content/prob-stat/siegrist" },
       },
