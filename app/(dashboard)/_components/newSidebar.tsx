@@ -168,6 +168,16 @@ const sidebarData: {
       },
     ],
   },
+  {
+    title: "Probabilities & Statistics",
+    items: [
+      {
+        text: "Probability, Mathematical Statistics, and Stochastic Processes (Siegrist)",
+        completed: false,
+        href: { pathname: "/student/content/prob-stat/siegrist" },
+      },
+    ],
+  },
 ];
 
 const NewSideBar: React.FC = () => {
