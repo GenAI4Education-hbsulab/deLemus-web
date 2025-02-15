@@ -159,25 +159,15 @@ const sidebarData: {
           pathname: "/student/content/machine-learn/transformer",
         },
       },
-    ],
-  },
-  {
-    title: "Probabilities & Statistics",
-    items: [
       {
         text: "Probabilities & Statistics",
         completed: false,
-        href: { pathname: "/student/content/prob-stat/siegrist" },
+        href: { pathname: "/student/content/machine-learn/prob-stat" },
       },
-    ],
-  },
-  {
-    title: "Linear Algebra",
-    items: [
       {
         text: "Linear Algebra",
         completed: false,
-        href: { pathname: "/student/content/linear-algebra/linear-algebra" },
+        href: { pathname: "/student/content/machine-learn/linear-algebra" },
       },
     ],
   },
